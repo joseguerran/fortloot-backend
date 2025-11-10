@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+*.tsbuildinfo
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.db-journal
+
+# Uploads
+uploads/
+!uploads/.gitkeep
+
+# Bot Data
+deviceAuth/
+*.deviceauth.json
+bot-data/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+
+# Testing
+coverage/
+
+# Temporary
+temp/
+tmp/
+*.tmp

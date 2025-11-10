@@ -1,0 +1,298 @@
+import rateLimit, { RateLimitRequestHandler } from 'express-rate-limit';
+import RedisStore from 'rate-limit-redis';
+import { Redis } from 'ioredis';
+import { config } from '../../config';
+import { log } from '../../utils/logger';
+import { AuthenticatedRequest } from './rbac';
+import { logRateLimitExceeded } from './auditLog';
+
+/**
+ * Rate limiting configuration for different operations
+ */
+
+// Create Redis client for rate limiting
+// NOTE: Disabled for now due to compatibility issues with rate-limit-redis and ioredis
+// Using memory store instead (suitable for development)
+let redisClient: Redis | null = null;
+
+// try {
+//   redisClient = new Redis({
+//     host: config.redis.host,
+//     port: config.redis.port,
+//     password: config.redis.password || undefined,
+//     maxRetriesPerRequest: 3,
+//   });
+
+//   redisClient.on('error', (err) => {
+//     log.error('Redis rate limiter error', err);
+//   });
+
+//   log.info('Redis rate limiter connected');
+// } catch (error) {
+//   log.warn('Redis not available for rate limiting, using memory store', error);
+// }
+
+log.info('Using in-memory rate limiter (Redis disabled for compatibility)');
+
+/**
+ * Create rate limiter with optional Redis store
+ */
+function createRateLimiter(options: {
+  windowMs: number;
+  max: number;
+  message: string;
+  skipSuccessfulRequests?: boolean;
+  keyGenerator?: (req: any) => string;
+}): RateLimitRequestHandler {
+  const store = redisClient
+    ? new RedisStore({
+        // @ts-ignore - Type mismatch with Redis client
+        client: redisClient,
+        prefix: 'rl:',
+      })
+    : undefined;
+
+  return rateLimit({
+    windowMs: options.windowMs,
+    max: options.max,
+    message: {
+      success: false,
+      error: 'RATE_LIMIT_EXCEEDED',
+      message: options.message,
+    },
+    skipSuccessfulRequests: options.skipSuccessfulRequests || false,
+    keyGenerator:
+      options.keyGenerator ||
+      ((req: AuthenticatedRequest) => {
+        // Use user ID if authenticated, otherwise IP
+        return req.user?.id || req.ip || 'anonymous';
+      }),
+    handler: async (req: AuthenticatedRequest, res) => {
+      await logRateLimitExceeded(req, options.max);
+
+      log.warn('Rate limit exceeded', {
+        userId: req.user?.id,
+        username: req.user?.username,
+        ip: req.ip,
+        path: req.path,
+        limit: options.max,
+      });
+
+      res.status(429).json({
+        success: false,
+        error: 'RATE_LIMIT_EXCEEDED',
+        message: options.message,
+        retryAfter: Math.ceil(options.windowMs / 1000),
+      });
+    },
+    standardHeaders: true,
+    legacyHeaders: false,
+    store,
+  });
+}
+
+/**
+ * General API rate limit (applies to all requests)
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const apiRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 999999, // Effectively unlimited
+  message: 'Too many requests from this user/IP. Please try again later.',
+});
+
+/**
+ * Authentication rate limit (prevents brute force)
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const authRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 999999, // Effectively unlimited
+  message: 'Too many authentication attempts. Please try again later.',
+  skipSuccessfulRequests: true, // Don't count successful logins
+  keyGenerator: (req) => req.ip || 'anonymous', // Always use IP for auth
+});
+
+/**
+ * Bot operation rate limit (start/stop/restart)
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const botOperationRateLimiter = createRateLimiter({
+  windowMs: 5 * 60 * 1000, // 5 minutes
+  max: 999999, // Effectively unlimited
+  message: 'Too many bot operations. Please slow down.',
+});
+
+/**
+ * Bot creation rate limit
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const botCreationRateLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 999999, // Effectively unlimited
+  message: 'Too many bots created. Please wait before adding more.',
+});
+
+/**
+ * Credentials update rate limit (very strict)
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const credentialsUpdateRateLimiter = createRateLimiter({
+  windowMs: 30 * 60 * 1000, // 30 minutes
+  max: 999999, // Effectively unlimited
+  message: 'Too many credential updates. Please wait before trying again.',
+});
+
+/**
+ * Order creation rate limit
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const orderCreationRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 999999, // Effectively unlimited
+  message: 'Too many orders created. Please slow down.',
+});
+
+/**
+ * Analytics/reporting rate limit (expensive queries)
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const analyticsRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 999999, // Effectively unlimited
+  message: 'Too many analytics requests. Please wait.',
+});
+
+/**
+ * Public endpoints rate limit (stricter for unauthenticated)
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const publicRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 999999, // Effectively unlimited
+  message: 'Too many requests. Please authenticate for higher limits.',
+  keyGenerator: (req) => req.ip || 'anonymous',
+});
+
+/**
+ * Per Epic Account ID rate limiter
+ * Prevents abuse by limiting actions per Epic Account
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const epicAccountRateLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 999999, // Effectively unlimited
+  message: 'Too many requests for this Epic Account. Please try again later.',
+  keyGenerator: (req) => {
+    const epicId = req.body?.epicAccountId || req.query?.epicAccountId || req.params?.epicAccountId;
+    return epicId ? `epic:${epicId}` : req.ip || 'anonymous';
+  },
+});
+
+/**
+ * Payment proof upload rate limiter
+ * Very strict to prevent spam uploads
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const uploadRateLimiter = createRateLimiter({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 999999, // Effectively unlimited
+  message: 'Too many uploads. Please wait before uploading again.',
+  keyGenerator: (req) => {
+    const orderId = req.params?.orderId || 'unknown';
+    const ip = req.ip || 'anonymous';
+    return `upload:${orderId}:${ip}`;
+  },
+});
+
+/**
+ * Order creation per Epic ID
+ * Stricter than general order creation
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const orderPerEpicIdRateLimiter = createRateLimiter({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 999999, // Effectively unlimited
+  message: 'Too many orders for this account. Please wait before creating more orders.',
+  keyGenerator: (req) => {
+    const customerId = req.body?.customerId;
+    const epicId = req.body?.epicAccountId;
+    const identifier = customerId || epicId || req.ip || 'anonymous';
+    return `order:${identifier}`;
+  },
+});
+
+/**
+ * Webhook rate limit
+ * DISABLED: Set to very high limit for internal use only
+ */
+export const webhookRateLimiter = createRateLimiter({
+  windowMs: 60 * 1000, // 1 minute
+  max: 999999, // Effectively unlimited
+  message: 'Webhook rate limit exceeded.',
+});
+
+/**
+ * Role-based rate limits
+ * Different roles get different limits
+ */
+export function roleBasedRateLimiter(limits: {
+  SUPER_ADMIN: number;
+  ADMIN: number;
+  OPERATOR: number;
+  VIEWER: number;
+}) {
+  return createRateLimiter({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 1000, // Default max (will be overridden per role)
+    message: 'Rate limit exceeded for your role.',
+    keyGenerator: (req: AuthenticatedRequest) => {
+      const userId = req.user?.id || req.ip || 'anonymous';
+      const role = req.user?.role || 'VIEWER';
+      return `${role}:${userId}`;
+    },
+  });
+}
+
+/**
+ * Custom rate limiter for specific operations
+ */
+export function customRateLimiter(
+  windowMs: number,
+  max: number,
+  message: string
+): RateLimitRequestHandler {
+  return createRateLimiter({
+    windowMs,
+    max,
+    message,
+  });
+}
+
+/**
+ * Cleanup function to close Redis connection
+ */
+export async function closeRateLimiter(): Promise<void> {
+  if (redisClient) {
+    await redisClient.quit();
+    log.info('Redis rate limiter disconnected');
+  }
+}
+
+export default {
+  apiRateLimiter,
+  authRateLimiter,
+  botOperationRateLimiter,
+  botCreationRateLimiter,
+  credentialsUpdateRateLimiter,
+  orderCreationRateLimiter,
+  analyticsRateLimiter,
+  publicRateLimiter,
+  epicAccountRateLimiter,
+  uploadRateLimiter,
+  orderPerEpicIdRateLimiter,
+  webhookRateLimiter,
+  roleBasedRateLimiter,
+  customRateLimiter,
+  closeRateLimiter,
+};

@@ -1,0 +1,564 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Bot {
+  id             String        @id @default(uuid())
+  name           String        @unique
+  status         BotStatus     @default(OFFLINE)
+  epicAccountId  String        @unique
+  displayName    String
+  deviceId       String
+  accountId      String
+  secret         String
+  giftsToday     Int           @default(0)
+  giftsAvailable Int           @default(5)
+  lastGiftReset  DateTime      @default(now())
+  lastHeartbeat  DateTime      @default(now())
+  lastError      String?
+  errorCount     Int           @default(0)
+  uptime         Int           @default(0)
+  maxGiftsPerDay Int           @default(5)
+  isActive       Boolean       @default(true)
+  priority       Int           @default(0)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  vBucks         Int           @default(0)
+  activities     BotActivity[]
+  metrics        BotMetric[]
+  friendships    Friendship[]
+  gifts          Gift[]
+
+  @@index([status, isActive])
+  @@index([giftsAvailable])
+}
+
+model Customer {
+  id              String       @id @default(uuid())
+  epicAccountId   String       @unique
+  email           String
+  sessionToken    String?      @unique
+  tier            CustomerTier @default(REGULAR)
+  isBlacklisted   Boolean      @default(false)
+  blacklistReason String?
+  totalOrders     Int          @default(0)
+  totalSpent      Float        @default(0)
+  lifetimeValue   Float        @default(0)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  friendships     Friendship[]
+  orders          Order[]
+
+  @@index([email])
+  @@index([tier, isBlacklisted])
+}
+
+model Friendship {
+  id            String           @id @default(uuid())
+  botId         String
+  epicAccountId String
+  displayName   String
+  status        FriendshipStatus @default(PENDING)
+  friendedAt    DateTime         @default(now())
+  canGiftAt     DateTime
+  requestedBy   String?
+  notes         String?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  customerId    String?
+  bot           Bot              @relation(fields: [botId], references: [id], onDelete: Cascade)
+  customer      Customer?        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, epicAccountId])
+  @@index([status, canGiftAt])
+  @@index([epicAccountId])
+  @@index([customerId])
+}
+
+model Order {
+  id                    String        @id @default(uuid())
+  customerEpicId        String
+  customerName          String
+  customerEmail         String?
+  productId             String
+  productName           String
+  productType           ProductType
+  itemId                String
+  quantity              Int           @default(1)
+  price                 Float
+  currency              String        @default("USD")
+  status                OrderStatus   @default(PENDING)
+  priority              OrderPriority @default(NORMAL)
+  assignedBotId         String?
+  assignedAt            DateTime?
+  attempts              Int           @default(0)
+  maxAttempts           Int           @default(3)
+  lastAttemptAt         DateTime?
+  estimatedDelivery     DateTime?
+  completedAt           DateTime?
+  failedAt              DateTime?
+  failureReason         String?
+  metadata              Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  basePrice             Float
+  customerId            String?
+  discountAmount        Float         @default(0)
+  expiresAt             DateTime?
+  finalPrice            Float
+  orderNumber           String        @unique
+  paymentMethod         String?
+  paymentProof          String?
+  paymentRejectedReason String?
+  paymentVerifiedAt     DateTime?
+  paymentVerifiedBy     String?
+  profitAmount          Float
+  paymentNotes          String?
+  paymentProofUrl       String?
+  paymentUploadedAt     DateTime?
+  transactionId         String?
+  progressSteps         Json?         // Array de pasos de progreso para tracking
+  currentStep           String?       // Descripción del paso actual
+  reassignmentCount     Int           @default(0) // Cuántas veces se reasignó el bot
+  epicAccountIdConfirmed String?      // Epic Account ID confirmado por el usuario en checkout
+  emailConfirmed        String?       // Email confirmado por el usuario en checkout
+  checkoutStartedAt     DateTime?     // Cuando el usuario inició el proceso de checkout
+  hasManualItems        Boolean       @default(false) // Si la orden contiene items manuales
+  gifts                 Gift[]
+  customer              Customer?     @relation(fields: [customerId], references: [id])
+  orderItems            OrderItem[]
+
+  @@index([status, priority])
+  @@index([status, assignedBotId])
+  @@index([customerEpicId])
+  @@index([customerId])
+  @@index([assignedBotId])
+  @@index([createdAt])
+  @@index([orderNumber])
+}
+
+model OrderItem {
+  id             String       @id @default(uuid())
+  orderId        String
+  catalogItemId  String?
+  productName    String
+  productType    ProductType
+  itemId         String
+  quantity       Int          @default(1)
+  basePrice      Float
+  profitAmount   Float
+  discountAmount Float        @default(0)
+  finalPrice     Float
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  catalogItem    CatalogItem? @relation(fields: [catalogItemId], references: [id])
+  order          Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([catalogItemId])
+}
+
+model Gift {
+  id              String     @id @default(uuid())
+  botId           String
+  orderId         String
+  recipientEpicId String
+  recipientName   String
+  itemId          String
+  itemName        String
+  status          GiftStatus @default(PENDING)
+  queuedAt        DateTime   @default(now())
+  sentAt          DateTime?
+  deliveredAt     DateTime?
+  failedAt        DateTime?
+  errorMessage    String?
+  retryCount      Int        @default(0)
+  metadata        Json?
+  createdAt       DateTime   @default(now())
+  updatedAt       DateTime   @updatedAt
+  bot             Bot        @relation(fields: [botId], references: [id])
+  order           Order      @relation(fields: [orderId], references: [id])
+
+  @@index([botId, status])
+  @@index([orderId])
+  @@index([sentAt])
+}
+
+model BotMetric {
+  id                String   @id @default(uuid())
+  botId             String
+  date              DateTime @default(now()) @db.Date
+  hour              Int?
+  giftsAttempted    Int      @default(0)
+  giftsSuccessful   Int      @default(0)
+  giftsFailed       Int      @default(0)
+  avgProcessingTime Float    @default(0)
+  uptimeSeconds     Int      @default(0)
+  errorCount        Int      @default(0)
+  revenueGenerated  Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+  bot               Bot      @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@unique([botId, date, hour])
+  @@index([date])
+}
+
+model Analytics {
+  id                String   @id @default(uuid())
+  date              DateTime @unique @default(now()) @db.Date
+  ordersCreated     Int      @default(0)
+  ordersCompleted   Int      @default(0)
+  ordersFailed      Int      @default(0)
+  ordersCancelled   Int      @default(0)
+  totalRevenue      Float    @default(0)
+  avgOrderValue     Float    @default(0)
+  avgDeliveryTime   Float    @default(0)
+  successRate       Float    @default(0)
+  totalBotsActive   Int      @default(0)
+  totalGiftsSent    Int      @default(0)
+  avgBotUtilization Float    @default(0)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([date])
+}
+
+model Config {
+  id          String   @id @default(uuid())
+  key         String   @unique
+  value       String
+  description String?
+  updatedAt   DateTime @updatedAt
+}
+
+model User {
+  id           String     @id @default(uuid())
+  username     String     @unique
+  email        String     @unique
+  passwordHash String
+  apiKey       String     @unique
+  role         UserRole   @default(VIEWER)
+  isActive     Boolean    @default(true)
+  lastLogin    DateTime?
+  lastLoginIp  String?
+  loginCount   Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  auditLogs    AuditLog[]
+
+  @@index([apiKey])
+  @@index([role, isActive])
+}
+
+model AuditLog {
+  id           String      @id @default(uuid())
+  userId       String?
+  username     String
+  ipAddress    String
+  userAgent    String?
+  action       AuditAction
+  resource     String
+  resourceId   String?
+  description  String
+  changes      Json?
+  metadata     Json?
+  success      Boolean     @default(true)
+  errorMessage String?
+  createdAt    DateTime    @default(now())
+  user         User?       @relation(fields: [userId], references: [id])
+
+  @@index([userId, createdAt])
+  @@index([action, createdAt])
+  @@index([resource, resourceId])
+  @@index([createdAt])
+}
+
+model BotActivity {
+  id          String          @id @default(uuid())
+  botId       String
+  type        BotActivityType
+  description String
+  metadata    Json?
+  createdAt   DateTime        @default(now())
+  bot         Bot             @relation(fields: [botId], references: [id], onDelete: Cascade)
+
+  @@index([botId, createdAt])
+  @@index([type, createdAt])
+}
+
+model PricingConfig {
+  id                   String   @id @default(uuid())
+  vbucksToUsdRate      Float    @default(0.005)
+  defaultProfitMargin  Float    @default(30)
+  categoryDiscounts    Json?
+  tierDiscounts        Json?
+  updatedAt            DateTime @updatedAt
+  updatedBy            String?
+  applyTaxToFinalPrice Boolean  @default(true)
+  currencyCode         String   @default("USD")
+  currencySymbol       String   @default("$")
+  defaultDiscount      Float    @default(0)
+  taxRate              Float    @default(0)
+  usdToLocalRate       Float    @default(1.0)
+
+  @@map("pricing_config")
+}
+
+model CatalogItem {
+  id                    String             @id @default(uuid())
+  itemId                String?
+  offerId               String?
+  name                  String
+  description           String
+  type                  ProductType
+  rarity                String?
+  image                 String
+  baseVbucks            Int?
+  basePriceUsd          Float?
+  profitMargin          Float?
+  discount              Float              @default(0)
+  flashSalePrice        Float?
+  flashSaleEndsAt       DateTime?
+  isCustom              Boolean            @default(false)
+  isActive              Boolean            @default(true)
+  requiresManualProcess Boolean            @default(false)
+  tags                  String[]
+  bundleItems           Json?
+  inDate                DateTime?          // When item entered shop
+  outDate               DateTime?          // When item exits shop
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  dailyCatalogs         DailyCatalogItem[]
+  orderItems            OrderItem[]
+
+  @@index([type, isActive])
+  @@index([isCustom])
+  @@index([itemId])
+  @@index([offerId])
+  @@index([outDate])
+}
+
+model DailyCatalog {
+  id           String             @id @default(uuid())
+  date         DateTime           @unique @db.Date
+  shopClosesAt DateTime
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+  items        DailyCatalogItem[]
+
+  @@index([date])
+}
+
+model DailyCatalogItem {
+  id        String       @id @default(uuid())
+  catalogId String
+  itemId    String
+  dayPrice  Float?
+  catalog   DailyCatalog @relation(fields: [catalogId], references: [id], onDelete: Cascade)
+  item      CatalogItem  @relation(fields: [itemId], references: [id])
+
+  @@unique([catalogId, itemId])
+  @@index([catalogId])
+}
+
+model PaymentMethod {
+  id           String   @id @default(uuid())
+  name         String
+  slug         String   @unique
+  description  String?
+  icon         String?
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  instructions String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  accountInfo  Json?
+
+  @@index([isActive, displayOrder])
+  @@index([slug])
+}
+
+model Blacklist {
+  id            String   @id @default(uuid())
+  epicAccountId String   @unique
+  email         String?
+  reason        String
+  blockedBy     String
+  createdAt     DateTime @default(now())
+
+  @@index([epicAccountId])
+  @@index([email])
+}
+
+model BusinessMetric {
+  id            String        @id @default(uuid())
+  date          DateTime      @db.Date
+  productId     String?
+  productName   String?
+  productType   ProductType?
+  customerId    String?
+  customerEmail String?
+  customerTier  CustomerTier?
+  orderCount    Int           @default(0)
+  revenue       Float         @default(0)
+  profit        Float         @default(0)
+  avgOrderValue Float         @default(0)
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+
+  @@unique([date, productId, customerId])
+  @@index([date, productType])
+  @@index([date, customerTier])
+  @@index([date])
+}
+
+enum BotStatus {
+  ONLINE
+  OFFLINE
+  BUSY
+  ERROR
+  MAINTENANCE
+}
+
+enum CustomerTier {
+  REGULAR
+  VIP
+  PREMIUM
+}
+
+enum FriendshipStatus {
+  PENDING
+  ACCEPTED
+  WAIT_PERIOD
+  READY
+  REJECTED
+  REMOVED
+}
+
+enum OrderStatus {
+  PENDING
+  WAITING_FRIENDSHIP
+  WAITING_PERIOD
+  QUEUED
+  PROCESSING
+  COMPLETED
+  FAILED
+  CANCELLED
+  REFUNDED
+  PENDING_PAYMENT
+  PAYMENT_UPLOADED
+  PAYMENT_VERIFIED
+  PAYMENT_REJECTED     // Pago rechazado por admin
+  EXPIRED              // Orden expirada por timeout
+  ABANDONED
+  WAITING_VBUCKS       // Bot sin V-Bucks, esperando recarga manual
+  WAITING_BOT_FIX      // Bot con credenciales expiradas, esperando actualización
+  WAITING_BOT          // Esperando bot disponible (alta demanda)
+}
+
+enum OrderPriority {
+  LOW
+  NORMAL
+  HIGH
+  VIP
+}
+
+enum ProductType {
+  VBUCKS
+  SKIN
+  EMOTE
+  PICKAXE
+  GLIDER
+  BACKPACK
+  WRAP
+  BATTLE_PASS
+  BUNDLE
+  OTHER
+}
+
+enum GiftStatus {
+  PENDING
+  QUEUED
+  SENDING
+  SENT
+  DELIVERED
+  FAILED
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  ADMIN
+  OPERATOR
+  VIEWER
+}
+
+enum AuditAction {
+  BOT_CREATE
+  BOT_UPDATE
+  BOT_DELETE
+  BOT_LOGIN
+  BOT_LOGOUT
+  BOT_RESTART
+  BOT_CREDENTIALS_UPDATE
+  BOT_SEND_GIFT
+  ORDER_CREATE
+  ORDER_UPDATE
+  ORDER_CANCEL
+  ORDER_COMPLETE
+  USER_CREATE
+  USER_UPDATE
+  USER_DELETE
+  USER_LOGIN
+  USER_LOGOUT
+  CONFIG_UPDATE
+  CONFIG_DELETE
+  CHECKOUT_MODE_UPDATE
+  MANUAL_CHECKOUT_UPDATE
+  SYSTEM_START
+  SYSTEM_STOP
+  AUTH_FAILED
+  PERMISSION_DENIED
+  RATE_LIMIT_EXCEEDED
+  BOT_SYNC_FRIENDS
+  PAYMENT_VERIFY
+  PAYMENT_REJECT
+  CUSTOMER_CREATE
+  CUSTOMER_UPDATE
+  CUSTOMER_TIER_CHANGE
+  CUSTOMER_BLACKLIST
+  CUSTOMER_UNBLACKLIST
+  CATALOG_UPDATE
+  CATALOG_ITEM_CREATE
+  CATALOG_ITEM_UPDATE
+  CATALOG_ITEM_DELETE
+  FLASH_SALE_CREATE
+  PRICING_CONFIG_UPDATE
+  PAYMENT_METHOD_CREATE
+  PAYMENT_METHOD_UPDATE
+  PAYMENT_METHOD_DELETE
+  PAYMENT_METHOD_TOGGLE
+  PAYMENT_METHOD_REORDER
+}
+
+enum BotActivityType {
+  BOT_STARTED
+  BOT_STOPPED
+  BOT_ERROR
+  FRIEND_REQUEST_RECEIVED
+  FRIEND_ADDED
+  FRIEND_REMOVED
+  GIFT_SENT
+  GIFT_FAILED
+  MESSAGE_RECEIVED
+  MESSAGE_SENT
+  FRIENDS_SYNCED
+  VBUCKS_UPDATED
+}

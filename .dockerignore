@@ -1,0 +1,33 @@
+# Minimal .dockerignore for backend
+# ONLY exclude what's absolutely necessary
+
+# Dependencies (will be installed fresh)
+node_modules
+
+# Build output (will be built fresh)
+dist
+
+# Development files
+*.test.ts
+*.spec.ts
+__tests__
+coverage
+
+# Environment files
+.env.local
+.env.*.local
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Git
+.git
+
+# Logs (will be generated at runtime)
+logs
+
+# IMPORTANT: DO NOT exclude prisma/ or prisma/migrations/
+# These are REQUIRED for production deployments
