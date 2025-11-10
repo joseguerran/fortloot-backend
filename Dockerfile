@@ -40,6 +40,9 @@ RUN mkdir -p /app/uploads/payment-proofs /app/logs && \
 	adduser --system --uid 1001 appuser && chown -R appuser /app
 USER appuser
 
+# Declare volumes for persistent data
+VOLUME ["/app/logs", "/app/uploads"]
+
 # Expose port
 EXPOSE 3001
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 CMD node dist/src/healthcheck.js || exit 1
