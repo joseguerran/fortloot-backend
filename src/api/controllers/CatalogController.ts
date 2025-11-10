@@ -377,7 +377,7 @@ export class CatalogController {
       }
 
       // Call the sync logic
-      const result = await this.syncCatalogFromAPI();
+      const result = await CatalogController.syncCatalogFromAPI();
 
       // Return HTTP response
       const message = result.fallback

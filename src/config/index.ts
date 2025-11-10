@@ -41,6 +41,10 @@ const envSchema = z.object({
 
   // Order Configuration
   PAYMENT_UPLOAD_TIMEOUT_MINUTES: z.coerce.number().default(10),
+
+  // CORS Configuration
+  ALLOWED_ORIGINS: z.string().optional(),
+  CORS_ALLOWED_DOMAIN: z.string().optional(),
 });
 
 // Parse and validate environment variables
@@ -108,6 +112,12 @@ export const config = {
   // Order Configuration
   order: {
     paymentUploadTimeoutMinutes: env.PAYMENT_UPLOAD_TIMEOUT_MINUTES,
+  },
+
+  // CORS Configuration
+  cors: {
+    allowedOrigins: env.ALLOWED_ORIGINS?.split(',').map((origin) => origin.trim()).filter(Boolean) || [],
+    allowedDomain: env.CORS_ALLOWED_DOMAIN,
   },
 } as const;
 

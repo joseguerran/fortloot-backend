@@ -20,7 +20,12 @@ export const createServer = (): Application => {
   // CORS - Allow admin dashboard
   const allowedOrigins = config.server.isDevelopment
     ? ['http://localhost:3000', 'http://localhost:3001', 'http://127.0.0.1:3000', 'http://127.0.0.1:3001']
-    : []; // Configure specific origins in production
+    : config.cors.allowedOrigins;
+
+  // Create regex for allowed domain if configured
+  const allowedDomainRegex = config.cors.allowedDomain
+    ? new RegExp(`^https?:\\/\\/([a-z0-9-]+\\.)?${config.cors.allowedDomain.replace('.', '\\.')}$`, 'i')
+    : null;
 
   app.use(
     cors({
@@ -28,11 +33,23 @@ export const createServer = (): Application => {
         // Allow requests with no origin (like mobile apps or curl)
         if (!origin) return callback(null, true);
 
-        if (config.server.isDevelopment || allowedOrigins.includes(origin)) {
-          callback(null, true);
-        } else {
-          callback(new Error('Not allowed by CORS'));
+        // Development mode - allow all localhost origins
+        if (config.server.isDevelopment) {
+          return callback(null, true);
         }
+
+        // Check explicit allowed origins list
+        if (allowedOrigins.includes(origin)) {
+          return callback(null, true);
+        }
+
+        // Check wildcard domain pattern
+        if (allowedDomainRegex && allowedDomainRegex.test(origin)) {
+          return callback(null, true);
+        }
+
+        // Reject
+        callback(new Error('Not allowed by CORS'));
       },
       credentials: true,
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
