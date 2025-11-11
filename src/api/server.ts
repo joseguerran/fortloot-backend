@@ -61,20 +61,38 @@ export const createServer = (): Application => {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Request logging
-  app.use((req, _res, next) => {
-    if (config.server.isDevelopment) {
-      // Development: log completo con query y body
-      log.debug(`${req.method} ${req.path}`, {
-        query: req.query,
-        body: req.body,
-      });
-    } else {
-      // Production: solo método, path y origen
-      log.info(`${req.method} ${req.path}`, {
+  // Request/Response logging
+  app.use((req, res, next) => {
+    const startTime = Date.now();
+
+    // Capture response
+    res.on('finish', () => {
+      const duration = Date.now() - startTime;
+      const logData = {
         origin: req.get('origin') || req.get('referer'),
-      });
-    }
+        statusCode: res.statusCode,
+        duration: `${duration}ms`,
+      };
+
+      if (config.server.isDevelopment) {
+        // Development: log completo
+        log.debug(`${req.method} ${req.path} ${res.statusCode}`, {
+          ...logData,
+          query: req.query,
+          body: req.body,
+        });
+      } else {
+        // Production: loguear con nivel apropiado según status code
+        if (res.statusCode >= 500) {
+          log.error(`${req.method} ${req.path} ${res.statusCode}`, logData);
+        } else if (res.statusCode >= 400) {
+          log.warn(`${req.method} ${req.path} ${res.statusCode}`, logData);
+        } else {
+          log.info(`${req.method} ${req.path} ${res.statusCode}`, logData);
+        }
+      }
+    });
+
     next();
   });
 
