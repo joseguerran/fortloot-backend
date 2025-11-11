@@ -61,16 +61,22 @@ export const createServer = (): Application => {
   app.use(express.json({ limit: '10mb' }));
   app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-  // Request logging in development
-  if (config.server.isDevelopment) {
-    app.use((req, _res, next) => {
+  // Request logging
+  app.use((req, _res, next) => {
+    if (config.server.isDevelopment) {
+      // Development: log completo con query y body
       log.debug(`${req.method} ${req.path}`, {
         query: req.query,
         body: req.body,
       });
-      next();
-    });
-  }
+    } else {
+      // Production: solo método, path y origen
+      log.info(`${req.method} ${req.path}`, {
+        origin: req.get('origin') || req.get('referer'),
+      });
+    }
+    next();
+  });
 
   // Serve static files (payment proofs, etc.)
   const uploadsPath = path.join(process.cwd(), FileManagementService.getUploadDir());
