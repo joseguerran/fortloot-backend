@@ -17,37 +17,34 @@ import {
 
 const router = Router();
 
-// Public routes
+// Protected routes (require authentication)
+router.use(authenticate);
+router.use(apiRateLimiter);
+
+// Get current catalog
 router.get(
   '/current',
-  publicRateLimiter,
   validate(getCurrentCatalogSchema),
   asyncHandler(CatalogController.getCurrentCatalog)
 );
 
+// Get catalog closes at
 router.get(
   '/closes-at',
-  publicRateLimiter,
   asyncHandler(CatalogController.getClosesAt)
 );
 
 // Search Epic Games catalog
 router.get(
   '/search',
-  apiRateLimiter,
   asyncHandler(CatalogController.searchCatalog)
 );
 
 // Debug endpoint to check catalog status
 router.get(
   '/debug',
-  publicRateLimiter,
   asyncHandler(CatalogController.debugCatalog)
 );
-
-// Protected routes (require authentication)
-router.use(authenticate);
-router.use(apiRateLimiter);
 
 // Update catalog (admin only)
 router.post(

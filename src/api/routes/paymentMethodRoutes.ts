@@ -8,28 +8,29 @@ import { auditLog } from '../middleware/auditLog';
 
 const router = Router();
 
-// Public routes (for frontend)
+// Protected routes (require authentication)
+router.use(authenticate);
+router.use(apiRateLimiter);
+
+// Get all payment methods (store needs this)
 router.get(
   '/',
-  publicRateLimiter,
   asyncHandler(PaymentMethodController.getAll)
 );
 
+// Get payment method by slug (store needs this)
 router.get(
   '/slug/:slug',
-  publicRateLimiter,
   asyncHandler(PaymentMethodController.getBySlug)
 );
 
+// Get payment method by ID (store needs this)
 router.get(
   '/:id',
-  publicRateLimiter,
   asyncHandler(PaymentMethodController.getById)
 );
 
-// Protected routes (require authentication and admin role)
-router.use(authenticate);
-router.use(apiRateLimiter);
+// Admin-only routes
 router.use(requireAdmin);
 
 // Create payment method

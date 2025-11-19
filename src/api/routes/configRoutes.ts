@@ -8,43 +8,39 @@ import { auditLog } from '../middleware/auditLog';
 
 const router = Router();
 
-// Public route for checkout mode GET (needed by frontend)
+// Protected routes (require authentication)
+router.use(authenticate);
+router.use(apiRateLimiter);
+
+// Get checkout mode (store needs this)
 router.get(
   '/checkout-mode',
-  publicRateLimiter,
   asyncHandler(ConfigController.getCheckoutMode)
 );
 
-// Protected route for checkout mode PUT (must be before general auth middleware)
+// Set checkout mode (admin only)
 router.put(
   '/checkout-mode',
-  authenticate,
   requireAdmin,
-  apiRateLimiter,
   auditLog('CHECKOUT_MODE_UPDATE', 'Config'),
   asyncHandler(ConfigController.setCheckoutMode)
 );
 
-// Public route for manual checkout GET (needed by frontend)
+// Get manual checkout (store needs this)
 router.get(
   '/manual-checkout',
-  publicRateLimiter,
   asyncHandler(ConfigController.getManualCheckout)
 );
 
-// Protected route for manual checkout PUT
+// Set manual checkout (admin only)
 router.put(
   '/manual-checkout',
-  authenticate,
   requireAdmin,
-  apiRateLimiter,
   auditLog('MANUAL_CHECKOUT_UPDATE', 'Config'),
   asyncHandler(ConfigController.setManualCheckout)
 );
 
-// Protected routes (require authentication and admin role)
-router.use(authenticate);
-router.use(apiRateLimiter);
+// Additional protected routes (require admin role)
 router.use(requireAdmin);
 
 // Get all configurations
