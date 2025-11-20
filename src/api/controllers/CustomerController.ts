@@ -46,8 +46,8 @@ export class CustomerController {
         where: { epicAccountId },
       });
 
-      // Check if user has at least one ACCEPTED or READY friendship
-      const readyFriendships = friendships.filter(f => f.status === 'ACCEPTED' || f.status === 'READY');
+      // Check if user has at least one ACCEPTED friendship
+      const readyFriendships = friendships.filter(f => f.status === 'ACCEPTED');
 
       if (readyFriendships.length === 0) {
         // Get list of active bots to show to the user
