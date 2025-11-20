@@ -42,8 +42,9 @@ export class CustomerController {
 
     // Only verify bot friendships if user has store items in cart
     if (hasStoreItems) {
+      // Search by displayName since users enter their Epic display name, not accountId
       const friendships = await prisma.friendship.findMany({
-        where: { epicAccountId },
+        where: { displayName: epicAccountId },
       });
 
       // Check if user has at least one ACCEPTED friendship
