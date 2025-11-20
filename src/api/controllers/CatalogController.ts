@@ -264,22 +264,22 @@ export class CatalogController {
     // AUTO-SYNC FALLBACK: Check if catalog is stale
     const { isStale, reason } = await CatalogFreshnessChecker.isCatalogStale();
 
-    if (isStale && !this.syncInProgress) {
+    if (isStale && !CatalogController.syncInProgress) {
       log.warn(`Catalog is stale (${reason}). Auto-triggering sync...`);
 
       // Set mutex to prevent concurrent syncs
-      this.syncInProgress = true;
+      CatalogController.syncInProgress = true;
 
       try {
         // Trigger background sync (don't await to not block the request)
-        this.performAutoSync().catch(error => {
+        CatalogController.performAutoSync().catch(error => {
           log.error('Auto-sync failed:', error);
         });
 
         // Wait a moment for sync to populate data
         await new Promise(resolve => setTimeout(resolve, 2000));
       } finally {
-        this.syncInProgress = false;
+        CatalogController.syncInProgress = false;
       }
     }
 
