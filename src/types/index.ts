@@ -230,6 +230,7 @@ export interface CustomerSession {
 export interface CustomerResponse {
   id: string;
   epicAccountId: string;
+  displayName?: string;
   email: string;
   tier: string;
   isBlacklisted: boolean;

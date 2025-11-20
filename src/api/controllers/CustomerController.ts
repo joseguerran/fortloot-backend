@@ -17,6 +17,9 @@ export class CustomerController {
   static async createSession(req: Request, res: Response) {
     const { epicAccountId, email, cartItems } = req.body as CustomerSession;
 
+    // Preserve the display name (what user entered)
+    let displayName: string | undefined = epicAccountId;
+
     // Check blacklist
     const blacklisted = await prisma.blacklist.findUnique({
       where: { epicAccountId },
@@ -41,9 +44,12 @@ export class CustomerController {
     log.info(`Session creation for ${epicAccountId} - hasStoreItems: ${hasStoreItems}`);
 
     // Only verify bot friendships if user has store items in cart
+    let actualEpicAccountId = epicAccountId;
+
     if (hasStoreItems) {
+      // Users enter their displayName, so we search by displayName first
       const friendships = await prisma.friendship.findMany({
-        where: { epicAccountId },
+        where: { displayName: epicAccountId },
       });
 
       // Check if user has at least one ACCEPTED friendship
@@ -73,11 +79,16 @@ export class CustomerController {
           })),
         });
       }
+
+      // Get the actual Epic Account ID and displayName from the friendship record
+      actualEpicAccountId = readyFriendships[0].epicAccountId;
+      displayName = readyFriendships[0].displayName;
+      log.info(`Resolved displayName ${epicAccountId} to epicAccountId ${actualEpicAccountId}`);
     }
 
-    // Find or create customer
+    // Find or create customer using the actual Epic Account ID
     let customer = await prisma.customer.findUnique({
-      where: { epicAccountId },
+      where: { epicAccountId: actualEpicAccountId },
     });
 
     if (!customer) {
@@ -86,13 +97,13 @@ export class CustomerController {
 
       customer = await prisma.customer.create({
         data: {
-          epicAccountId,
+          epicAccountId: actualEpicAccountId,
           email,
           sessionToken,
         },
       });
 
-      log.info(`New customer created: ${epicAccountId}`);
+      log.info(`New customer created: ${actualEpicAccountId}`);
     } else if (customer.isBlacklisted) {
       return res.status(403).json({
         success: false,
@@ -112,6 +123,7 @@ export class CustomerController {
     const response: CustomerResponse = {
       id: customer.id,
       epicAccountId: customer.epicAccountId,
+      displayName: displayName,
       email: customer.email,
       tier: customer.tier,
       isBlacklisted: customer.isBlacklisted,
