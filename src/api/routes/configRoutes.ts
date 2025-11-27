@@ -40,6 +40,21 @@ router.put(
   asyncHandler(ConfigController.setManualCheckout)
 );
 
+// Get WhatsApp notifications enabled (admin only)
+router.get(
+  '/whatsapp-enabled',
+  requireAdmin,
+  asyncHandler(ConfigController.getWhatsAppEnabled)
+);
+
+// Set WhatsApp notifications enabled (admin only)
+router.put(
+  '/whatsapp-enabled',
+  requireAdmin,
+  auditLog('WHATSAPP_CONFIG_UPDATE', 'Config'),
+  asyncHandler(ConfigController.setWhatsAppEnabled)
+);
+
 // Additional protected routes (require admin role)
 router.use(requireAdmin);
 

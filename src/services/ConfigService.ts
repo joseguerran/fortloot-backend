@@ -157,4 +157,37 @@ export class ConfigService {
       throw error;
     }
   }
+
+  /**
+   * Get whether WhatsApp notifications are enabled
+   * Returns false by default if not configured
+   */
+  static async isWhatsAppEnabled(): Promise<boolean> {
+    try {
+      const value = await this.get('whatsapp_notifications_enabled');
+      return value === 'true';
+    } catch (error) {
+      log.error('Error fetching WhatsApp enabled status:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Set whether WhatsApp notifications are enabled
+   */
+  static async setWhatsAppEnabled(enabled: boolean): Promise<Config> {
+    try {
+      const config = await this.set(
+        'whatsapp_notifications_enabled',
+        enabled.toString(),
+        'Enable WhatsApp notifications to admin for orders and payments'
+      );
+
+      log.info(`WhatsApp notifications enabled changed to: ${enabled}`);
+      return config;
+    } catch (error) {
+      log.error('Error setting WhatsApp enabled:', error);
+      throw error;
+    }
+  }
 }

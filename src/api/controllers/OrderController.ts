@@ -9,6 +9,7 @@ import { calculateEstimatedDelivery, getPriorityValue } from '../../utils/helper
 import { OrderStatus, FriendshipStatus, ProductType } from '@prisma/client';
 import { PricingService } from '../../services/PricingService';
 import { EmailService } from '../../services/EmailService';
+import { WhatsAppService } from '../../services/WhatsAppService';
 import { config } from '../../config';
 
 // Helper function to normalize product type from frontend to backend enum
@@ -224,6 +225,14 @@ export class OrderController {
       order.orderNumber,
       totalAmount,
       expiresAt
+    );
+
+    // Notify admin via WhatsApp
+    await WhatsAppService.notifyOrderCreated(
+      order.orderNumber,
+      customer.epicAccountId,
+      totalAmount,
+      items.length
     );
 
     // Order starts in PENDING_PAYMENT status

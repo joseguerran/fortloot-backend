@@ -170,4 +170,45 @@ export class ConfigController {
       value: enabled
     });
   }
+
+  /**
+   * Get WhatsApp notifications enabled setting
+   * GET /api/config/whatsapp-enabled
+   */
+  static async getWhatsAppEnabled(req: Request, res: Response): Promise<void> {
+    const enabled = await ConfigService.isWhatsAppEnabled();
+
+    res.json({
+      success: true,
+      enabled,
+      value: enabled
+    });
+  }
+
+  /**
+   * Set WhatsApp notifications enabled setting
+   * PUT /api/config/whatsapp-enabled
+   */
+  static async setWhatsAppEnabled(req: Request, res: Response): Promise<void> {
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: 'enabled must be a boolean value'
+      });
+      return;
+    }
+
+    const config = await ConfigService.setWhatsAppEnabled(enabled);
+
+    log.info(`WhatsApp notifications enabled updated to: ${enabled} by user ${(req as any).user?.email || 'unknown'}`);
+
+    res.json({
+      success: true,
+      data: config,
+      enabled,
+      value: enabled
+    });
+  }
 }

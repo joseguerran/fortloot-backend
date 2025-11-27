@@ -5,6 +5,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { OrderStatus } from '@prisma/client';
 import { EmailService } from '../../services/EmailService';
+import { WhatsAppService } from '../../services/WhatsAppService';
 
 export class PaymentController {
   /**
@@ -97,6 +98,13 @@ export class PaymentController {
       updated.orderNumber,
       updated.finalPrice || 0,
       order.customer.epicAccountId
+    );
+
+    // Notify admin via WhatsApp
+    await WhatsAppService.notifyPaymentUploaded(
+      updated.orderNumber,
+      order.customer.epicAccountId,
+      updated.finalPrice || 0
     );
 
     res.json({
