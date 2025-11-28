@@ -200,7 +200,7 @@ export class QueueManager {
           {
             orderId: order.id,
             recipientEpicId: order.customer.epicAccountId,
-            recipientName: order.customer.epicAccountId, // Using epicAccountId as display name
+            recipientName: order.customer.displayName,
             itemId: orderItem.catalogItem.itemId || orderItem.itemId,
             itemName: orderItem.productName,
             productType: orderItem.productType,

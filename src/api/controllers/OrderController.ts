@@ -43,8 +43,6 @@ export class OrderController {
       subtotalAmount,
       discountAmount,
       profitAmount,
-      epicAccountIdConfirmed,
-      emailConfirmed,
       checkoutStartedAt,
       hasManualItems
     } = req.body;
@@ -102,8 +100,6 @@ export class OrderController {
           profitAmount: profitAmount,
           discountAmount: discountAmount,
           finalPrice: totalAmount,
-          price: totalAmount,
-          quantity: items.reduce((sum: number, item: any) => sum + item.quantity, 0),
           // Reset expiration time
           expiresAt: newExpiresAt,
           updatedAt: new Date(),
@@ -124,7 +120,7 @@ export class OrderController {
         },
       });
 
-      log.info(`Reusing existing order ${existingOrder.orderNumber} for customer ${customer.epicAccountId}`);
+      log.info(`Reusing existing order ${existingOrder.orderNumber} for customer ${customer.displayName}`);
 
       return res.status(200).json({
         success: true,
@@ -132,7 +128,7 @@ export class OrderController {
           orderId: updatedOrder.id,
           orderNumber: updatedOrder.orderNumber,
           status: updatedOrder.status,
-          totalAmount: updatedOrder.price,
+          totalAmount: updatedOrder.finalPrice,
           expiresAt: updatedOrder.expiresAt,
         },
         message: 'Existing order updated successfully. Please upload payment proof.',
@@ -148,42 +144,24 @@ export class OrderController {
     // Generate order number
     const orderNumber = `FL-${Date.now()}-${Math.random().toString(36).substr(2, 9).toUpperCase()}`;
 
-    // Get first item for legacy fields (productName, productType, etc.)
-    const firstItem = items[0];
-    const productName = firstItem.name || 'Product';
-    const productType = normalizeProductType(firstItem.type);
-
     // Create order in database with OrderItems for multi-item support
     const order = await prisma.order.create({
       data: {
         orderNumber,
         customerId: customer.id,
-        customerEpicId: customer.epicAccountId,
-        customerName: customer.epicAccountId,
-        customerEmail: customer.email,
         status: OrderStatus.PENDING_PAYMENT,
 
-        // Legacy product info (from first item for backward compatibility)
-        productId: firstItem.catalogItemId,
-        productName,
-        productType,
-        itemId: firstItem.catalogItemId,
-        quantity: items.reduce((sum, item) => sum + item.quantity, 0), // Total quantity
-
-        // Pricing (totals)
+        // Pricing (totals calculated from OrderItems)
         basePrice: subtotalAmount,
         profitAmount: profitAmount,
         discountAmount: discountAmount,
         finalPrice: totalAmount,
-        price: totalAmount,
         currency: 'USD',
 
         expiresAt,
         priority: 'NORMAL',
 
-        // Checkout tracking fields
-        epicAccountIdConfirmed: epicAccountIdConfirmed || customer.epicAccountId,
-        emailConfirmed: emailConfirmed || customer.email,
+        // Checkout tracking
         checkoutStartedAt: checkoutStartedAt ? new Date(checkoutStartedAt) : new Date(),
         hasManualItems: hasManualItems || false,
 
@@ -230,7 +208,7 @@ export class OrderController {
     // Notify admin via WhatsApp
     await WhatsAppService.notifyOrderCreated(
       order.orderNumber,
-      customer.epicAccountId,
+      customer.displayName,
       totalAmount,
       items.length
     );
@@ -244,10 +222,77 @@ export class OrderController {
         orderId: order.id,
         orderNumber: order.orderNumber,
         status: order.status,
-        totalAmount: order.price,
+        totalAmount: order.finalPrice,
         expiresAt: order.expiresAt,
       },
       message: 'Order created successfully. Please upload payment proof.',
+    });
+  }
+
+  /**
+   * Get order by order number (public endpoint for email links)
+   */
+  static async getOrderByNumber(req: Request, res: Response) {
+    const { orderNumber } = req.params;
+
+    const order = await prisma.order.findUnique({
+      where: { orderNumber },
+      select: {
+        id: true,
+        orderNumber: true,
+        status: true,
+        priority: true,
+        currency: true,
+        basePrice: true,
+        discountAmount: true,
+        finalPrice: true,
+        paymentMethod: true,
+        paymentProofUrl: true,
+        paymentUploadedAt: true,
+        paymentRejectedReason: true,
+        transactionId: true,
+        estimatedDelivery: true,
+        completedAt: true,
+        failedAt: true,
+        failureReason: true,
+        expiresAt: true,
+        createdAt: true,
+        updatedAt: true,
+        customer: {
+          select: {
+            id: true,
+            displayName: true,
+            epicAccountId: true,
+            tier: true,
+          },
+        },
+        orderItems: {
+          include: {
+            catalogItem: {
+              select: {
+                name: true,
+                description: true,
+                type: true,
+                image: true,
+                rarity: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'ORDER_NOT_FOUND',
+        message: `Order ${orderNumber} not found`,
+      });
+    }
+
+    res.json({
+      success: true,
+      data: order,
     });
   }
 
@@ -264,22 +309,12 @@ export class OrderController {
         orderNumber: true,
         status: true,
         priority: true,
-        price: true,
         currency: true,
-        quantity: true,
-        productId: true,
-        productName: true,
-        productType: true,
-        itemId: true,
-        customerEpicId: true,
-        customerName: true,
-        customerEmail: true,
         basePrice: true,
         discountAmount: true,
         finalPrice: true,
         profitAmount: true,
         paymentMethod: true,
-        paymentProof: true,
         paymentProofUrl: true,
         paymentUploadedAt: true,
         paymentVerifiedAt: true,
@@ -297,6 +332,8 @@ export class OrderController {
         failedAt: true,
         failureReason: true,
         expiresAt: true,
+        checkoutStartedAt: true,
+        hasManualItems: true,
         metadata: true,
         createdAt: true,
         updatedAt: true,
@@ -306,8 +343,10 @@ export class OrderController {
         customer: {
           select: {
             id: true,
+            displayName: true,
             epicAccountId: true,
             email: true,
+            phoneNumber: true,
             tier: true,
           },
         },
@@ -418,6 +457,18 @@ export class OrderController {
         orderBy: { createdAt: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
+        include: {
+          customer: {
+            select: {
+              id: true,
+              displayName: true,
+              epicAccountId: true,
+              email: true,
+              phoneNumber: true,
+              tier: true,
+            },
+          },
+        },
       }),
       prisma.order.count({ where }),
     ]);
@@ -482,7 +533,7 @@ export class OrderController {
       await EmailService.sendPaymentVerifiedNotification(
         order.customer.email,
         order.orderNumber,
-        order.price
+        order.finalPrice
       );
     }
 

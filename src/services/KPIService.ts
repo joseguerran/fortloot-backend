@@ -102,24 +102,32 @@ export class KPIService {
       if (filters.endDate) where.createdAt.lte = filters.endDate;
     }
 
-    if (filters.productType) {
-      where.productType = filters.productType;
-    }
+    // Note: productType filter now requires joining with orderItems
+    // For simplicity, we filter in memory after fetching
 
     const orders = await prisma.order.findMany({
       where,
       select: {
-        productType: true,
         finalPrice: true,
         profitAmount: true,
+        orderItems: {
+          select: {
+            productType: true,
+          },
+        },
       },
     });
 
-    // Group by product type
+    // Filter by productType if specified
+    const filteredOrders = filters.productType
+      ? orders.filter(o => o.orderItems.some(i => i.productType === filters.productType))
+      : orders;
+
+    // Group by product type (use first orderItem's type)
     const productMap = new Map<ProductType, { revenue: number; profit: number; count: number }>();
 
-    for (const order of orders) {
-      const type = order.productType;
+    for (const order of filteredOrders) {
+      const type = order.orderItems[0]?.productType || ProductType.OTHER;
       const current = productMap.get(type) || { revenue: 0, profit: 0, count: 0 };
 
       productMap.set(type, {
@@ -287,25 +295,32 @@ export class KPIService {
     const orders = await prisma.order.findMany({
       where,
       select: {
-        productId: true,
-        productName: true,
-        productType: true,
         finalPrice: true,
         profitAmount: true,
+        orderItems: {
+          select: {
+            catalogItemId: true,
+            productName: true,
+            productType: true,
+          },
+        },
       },
     });
 
-    // Group by product
+    // Group by product (use first orderItem)
     const productMap = new Map<string, any>();
 
     for (const order of orders) {
-      const key = order.productId || order.productName;
+      const firstItem = order.orderItems[0];
+      if (!firstItem) continue;
+
+      const key = firstItem.catalogItemId || firstItem.productName;
       if (!key) continue;
 
       const current = productMap.get(key) || {
-        productId: order.productId,
-        productName: order.productName,
-        productType: order.productType,
+        productId: firstItem.catalogItemId,
+        productName: firstItem.productName,
+        productType: firstItem.productType,
         salesCount: 0,
         revenue: 0,
         profit: 0,

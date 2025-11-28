@@ -4,7 +4,7 @@ import { log } from '../../utils/logger';
 
 /**
  * Middleware to check if a customer is blacklisted
- * Expects epicAccountId in request body or query
+ * Checks by displayName (primary) or customerId
  */
 export async function checkBlacklist(
   req: Request,
@@ -12,65 +12,106 @@ export async function checkBlacklist(
   next: NextFunction
 ) {
   try {
-    const epicAccountId =
-      req.body.epicAccountId ||
-      req.query.epicAccountId ||
-      req.body.customerEpicId ||
-      req.query.customerEpicId;
+    // Get customer identifier from request
+    const customerId = req.body.customerId || req.query.customerId;
+    const displayName = req.body.displayName || req.query.displayName;
 
-    if (!epicAccountId) {
-      // If no epicAccountId provided, skip blacklist check
+    if (!customerId && !displayName) {
+      // If no identifier provided, skip blacklist check
       return next();
     }
 
-    // Check if customer is blacklisted
-    const blacklistEntry = await prisma.blacklist.findUnique({
-      where: { epicAccountId: epicAccountId as string },
-    });
+    // If we have customerId, get the customer and check
+    if (customerId) {
+      const customer = await prisma.customer.findUnique({
+        where: { id: customerId as string },
+        select: {
+          displayName: true,
+          epicAccountId: true,
+          isBlacklisted: true,
+          blacklistReason: true,
+        },
+      });
 
-    if (blacklistEntry) {
-      log.warn(
-        `Blacklisted customer attempted action: ${epicAccountId}`,
-        {
+      if (customer) {
+        // Check if customer is marked as blacklisted
+        if (customer.isBlacklisted) {
+          log.warn(`Blacklisted customer attempted action: ${customer.displayName}`, {
+            reason: customer.blacklistReason,
+            ip: req.ip,
+            endpoint: req.path,
+          });
+
+          return res.status(403).json({
+            success: false,
+            error: 'CUSTOMER_BLACKLISTED',
+            message: 'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
+          });
+        }
+
+        // Check blacklist table by displayName
+        const blacklistEntry = await prisma.blacklist.findUnique({
+          where: { displayName: customer.displayName },
+        });
+
+        if (blacklistEntry) {
+          log.warn(`Blacklisted customer attempted action: ${customer.displayName}`, {
+            reason: blacklistEntry.reason,
+            ip: req.ip,
+            endpoint: req.path,
+          });
+
+          return res.status(403).json({
+            success: false,
+            error: 'CUSTOMER_BLACKLISTED',
+            message: 'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
+          });
+        }
+      }
+    }
+
+    // If we have displayName directly, check blacklist
+    if (displayName) {
+      const blacklistEntry = await prisma.blacklist.findUnique({
+        where: { displayName: displayName as string },
+      });
+
+      if (blacklistEntry) {
+        log.warn(`Blacklisted displayName attempted action: ${displayName}`, {
           reason: blacklistEntry.reason,
           ip: req.ip,
           endpoint: req.path,
-        }
-      );
+        });
 
-      return res.status(403).json({
-        success: false,
-        error: 'CUSTOMER_BLACKLISTED',
-        message:
-          'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
+        return res.status(403).json({
+          success: false,
+          error: 'CUSTOMER_BLACKLISTED',
+          message: 'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
+        });
+      }
+
+      // Also check customer record by displayName
+      const customer = await prisma.customer.findUnique({
+        where: { displayName: displayName as string },
+        select: {
+          isBlacklisted: true,
+          blacklistReason: true,
+        },
       });
-    }
 
-    // Check if customer exists and is marked as blacklisted
-    const customer = await prisma.customer.findUnique({
-      where: { epicAccountId: epicAccountId as string },
-      select: {
-        isBlacklisted: true,
-        blacklistReason: true,
-      },
-    });
-
-    if (customer && customer.isBlacklisted) {
-      log.warn(
-        `Blacklisted customer attempted action: ${epicAccountId}`,
-        {
+      if (customer && customer.isBlacklisted) {
+        log.warn(`Blacklisted customer attempted action: ${displayName}`, {
           reason: customer.blacklistReason,
           ip: req.ip,
           endpoint: req.path,
-        }
-      );
+        });
 
-      return res.status(403).json({
-        success: false,
-        error: 'CUSTOMER_BLACKLISTED',
-        message:
-          'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
-      });
+        return res.status(403).json({
+          success: false,
+          error: 'CUSTOMER_BLACKLISTED',
+          message: 'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
+        });
+      }
     }
 
     // Not blacklisted, continue
@@ -88,19 +129,19 @@ export async function checkBlacklist(
 export function checkBlacklistForParam(paramName: string) {
   return async (req: Request, res: Response, next: NextFunction) => {
     try {
-      const epicAccountId = req.params[paramName];
+      const identifier = req.params[paramName];
 
-      if (!epicAccountId) {
+      if (!identifier) {
         return next();
       }
 
-      // Check if customer is blacklisted
+      // Check blacklist by displayName
       const blacklistEntry = await prisma.blacklist.findUnique({
-        where: { epicAccountId },
+        where: { displayName: identifier },
       });
 
       if (blacklistEntry) {
-        log.warn(`Blacklisted customer attempted action: ${epicAccountId}`, {
+        log.warn(`Blacklisted customer attempted action: ${identifier}`, {
           reason: blacklistEntry.reason,
           ip: req.ip,
           endpoint: req.path,
@@ -109,14 +150,13 @@ export function checkBlacklistForParam(paramName: string) {
         return res.status(403).json({
           success: false,
           error: 'CUSTOMER_BLACKLISTED',
-          message:
-            'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
+          message: 'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
         });
       }
 
-      // Check customer record
+      // Check customer record by displayName
       const customer = await prisma.customer.findUnique({
-        where: { epicAccountId },
+        where: { displayName: identifier },
         select: {
           isBlacklisted: true,
           blacklistReason: true,
@@ -124,7 +164,7 @@ export function checkBlacklistForParam(paramName: string) {
       });
 
       if (customer && customer.isBlacklisted) {
-        log.warn(`Blacklisted customer attempted action: ${epicAccountId}`, {
+        log.warn(`Blacklisted customer attempted action: ${identifier}`, {
           reason: customer.blacklistReason,
           ip: req.ip,
           endpoint: req.path,
@@ -133,8 +173,7 @@ export function checkBlacklistForParam(paramName: string) {
         return res.status(403).json({
           success: false,
           error: 'CUSTOMER_BLACKLISTED',
-          message:
-            'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
+          message: 'Tu cuenta ha sido bloqueada. Por favor contacta a soporte para más información.',
         });
       }
 

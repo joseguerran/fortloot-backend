@@ -1,0 +1,151 @@
+{
+  "_comment": "JSON para re-insertar la orden completada con el modelo LIMPIO (sin campos legacy)",
+  "_generated": "2025-11-28",
+  "_fields_removed_from_order": [
+    "customerEpicId",
+    "customerName",
+    "customerEmail",
+    "epicAccountIdConfirmed",
+    "emailConfirmed",
+    "productId",
+    "productName",
+    "productType",
+    "itemId",
+    "quantity",
+    "price",
+    "paymentProof"
+  ],
+
+  "customer": {
+    "id": "90550bc8-20d2-4533-bbbc-eaafccde9b37",
+    "epicAccountId": "08cd913a82004838a3e172e94bf7493a",
+    "displayName": "08cd913a82004838a3e172e94bf7493a",
+    "email": "hazelvguerra@gmail.com",
+    "phoneNumber": null,
+    "contactPreference": "EMAIL",
+    "sessionToken": "b6df275cb7ec1988a0c0af0a1267f4e071a001c41ab2a354c7412de1c50e15d8",
+    "tier": "REGULAR",
+    "isBlacklisted": false,
+    "blacklistReason": null,
+    "totalOrders": 1,
+    "totalSpent": 1.11,
+    "lifetimeValue": 0,
+    "createdAt": "2025-11-18T02:31:57.026Z",
+    "updatedAt": "2025-11-28T00:00:00.000Z"
+  },
+
+  "order": {
+    "id": "24f31c38-7851-4dee-9fd2-62b291d3df24",
+    "orderNumber": "FL-1763606610305-4LH80O40U",
+    "customerId": "90550bc8-20d2-4533-bbbc-eaafccde9b37",
+    "status": "COMPLETED",
+    "priority": "NORMAL",
+    "basePrice": 1.11,
+    "discountAmount": 0,
+    "profitAmount": 0,
+    "finalPrice": 1.11,
+    "currency": "USD",
+    "assignedBotId": "58853c9e-7eb4-4c4f-95b0-06978bb69a3d",
+    "assignedAt": "2025-11-20T02:46:41.746Z",
+    "attempts": 0,
+    "maxAttempts": 3,
+    "lastAttemptAt": null,
+    "reassignmentCount": 0,
+    "estimatedDelivery": null,
+    "completedAt": "2025-11-20T02:46:46.965Z",
+    "failedAt": null,
+    "expiresAt": "2025-11-20T02:53:30.305Z",
+    "checkoutStartedAt": "2025-11-20T02:43:30.305Z",
+    "paymentMethod": "Binance",
+    "paymentProofUrl": "/uploads/payment-proofs/24f31c38-7851-4dee-9fd2-62b291d3df24-1763606619561-Orden_Compra_PO-000005.pdf",
+    "paymentUploadedAt": "2025-11-20T02:43:39.565Z",
+    "paymentVerifiedAt": "2025-11-20T02:46:41.691Z",
+    "paymentVerifiedBy": null,
+    "paymentRejectedReason": null,
+    "paymentNotes": null,
+    "transactionId": null,
+    "failureReason": null,
+    "progressSteps": [
+      {
+        "step": "CREATED",
+        "details": "Orden FL-1763606610305-4LH80O40U creada exitosamente",
+        "timestamp": "2025-11-20T02:43:30.315Z"
+      },
+      {
+        "step": "PAYMENT_PENDING",
+        "details": "Esperando comprobante de pago. Válido hasta 20/11/2025, 2:53:30",
+        "timestamp": "2025-11-20T02:43:30.321Z"
+      },
+      {
+        "step": "PAYMENT_VERIFIED",
+        "details": "Pago verificado por administrador",
+        "timestamp": "2025-11-20T02:46:41.699Z"
+      },
+      {
+        "step": "QUEUED",
+        "details": "Orden encolada para procesamiento",
+        "timestamp": "2025-11-20T02:46:41.733Z"
+      },
+      {
+        "step": "BOT_ASSIGNED",
+        "details": "Bot Fortloot2025.1 asignado",
+        "timestamp": "2025-11-20T02:46:41.752Z"
+      },
+      {
+        "step": "SENDING_GIFT",
+        "details": "Enviando Stand-Off a 08cd913a82004838a3e172e94bf7493a",
+        "timestamp": "2025-11-20T02:46:41.770Z"
+      },
+      {
+        "step": "GIFT_SENT",
+        "details": "Regalo enviado exitosamente a 08cd913a82004838a3e172e94bf7493a",
+        "timestamp": "2025-11-20T02:46:46.970Z"
+      }
+    ],
+    "currentStep": "Regalo enviado exitosamente a 08cd913a82004838a3e172e94bf7493a",
+    "hasManualItems": false,
+    "metadata": null,
+    "createdAt": "2025-11-20T02:43:30.307Z",
+    "updatedAt": "2025-11-20T02:46:46.971Z"
+  },
+
+  "orderItems": [
+    {
+      "id": "d9cb55ec-49d1-4512-8717-30867b0abd6c",
+      "orderId": "24f31c38-7851-4dee-9fd2-62b291d3df24",
+      "catalogItemId": "687ce7d2-706d-4999-bc64-90589c71aa78",
+      "productName": "Stand-Off",
+      "productType": "EMOTE",
+      "itemId": "687ce7d2-706d-4999-bc64-90589c71aa78",
+      "quantity": 1,
+      "basePrice": 1.11,
+      "profitAmount": 0,
+      "discountAmount": 0,
+      "finalPrice": 1.11,
+      "createdAt": "2025-11-20T02:43:30.307Z",
+      "updatedAt": "2025-11-20T02:43:30.307Z"
+    }
+  ],
+
+  "gifts": [
+    {
+      "id": "c34cdd78-8e75-4de7-871b-ae874df08bf9",
+      "botId": "58853c9e-7eb4-4c4f-95b0-06978bb69a3d",
+      "orderId": "24f31c38-7851-4dee-9fd2-62b291d3df24",
+      "recipientEpicId": "08cd913a82004838a3e172e94bf7493a",
+      "recipientName": "08cd913a82004838a3e172e94bf7493a",
+      "itemId": "EID_Stalemate",
+      "itemName": "Stand-Off",
+      "status": "SENT",
+      "queuedAt": "2025-11-20T02:46:41.764Z",
+      "sentAt": "2025-11-20T02:46:46.961Z",
+      "deliveredAt": null,
+      "failedAt": null,
+      "errorMessage": null,
+      "retryCount": 0,
+      "metadata": null,
+      "createdAt": "2025-11-20T02:46:41.764Z",
+      "updatedAt": "2025-11-20T02:46:46.962Z"
+    }
+  ]
+}

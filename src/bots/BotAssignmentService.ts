@@ -1,9 +1,12 @@
 import { prisma } from '../database/client';
-import { Bot, Order } from '@prisma/client';
+import { Bot, Order, Customer } from '@prisma/client';
 import { log } from '../utils/logger';
 import { botManager } from './BotManager';
 import { calculateGiftsToday } from '../utils/helpers';
 import { NotificationService } from '../services/NotificationService';
+
+// Order type with customer relation included
+type OrderWithCustomer = Order & { customer?: Customer | null };
 
 /**
  * Servicio de asignación inteligente de bots a órdenes
@@ -14,7 +17,7 @@ export class BotAssignmentService {
    * Asigna el mejor bot para una orden
    * Lógica SIMPLE: Primero que cumpla todos los requisitos
    */
-  static async assignBotToOrder(order: Order): Promise<BotAssignment> {
+  static async assignBotToOrder(order: OrderWithCustomer): Promise<BotAssignment> {
     log.info(`🤖 Buscando bot para orden ${order.id}`);
 
     // 1. Calcular requisitos de la orden
@@ -99,7 +102,7 @@ export class BotAssignmentService {
   private static async handleNoBotAvailable(
     allBots: Bot[],
     requirements: OrderRequirements,
-    order: Order
+    order: OrderWithCustomer
   ): Promise<BotAssignment> {
     // Clasificar bots por problema
     const offlineBots = allBots.filter((b) => b.status === 'OFFLINE' || b.status === 'ERROR');
@@ -177,9 +180,10 @@ export class BotAssignmentService {
       log.warn(`⏰ Todos los bots sin gifts, próximo reset en ${Math.round(waitTime / 1000 / 60)} minutos`);
 
       // Notificar cliente sobre demanda alta
+      // Use customer relation for email
       await NotificationService.notifyCustomerDelay({
         orderId: order.id,
-        customerEmail: order.customerEmail,
+        customerEmail: order.customer?.email || '',
         reason: 'high_demand',
         estimatedDelayMinutes: Math.ceil(waitTime / 1000 / 60),
       });

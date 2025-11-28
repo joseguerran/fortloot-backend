@@ -116,6 +116,7 @@ export class OrderProgressTracker {
     const descriptions: Record<ProgressStep, string> = {
       CREATED: 'Orden creada',
       PAYMENT_PENDING: 'Esperando pago',
+      PAYMENT_UPLOADED: 'Comprobante subido',
       PAYMENT_VERIFIED: 'Pago verificado',
       QUEUED: 'En cola de procesamiento',
       BOT_ASSIGNED: 'Bot asignado',
@@ -235,6 +236,7 @@ export class OrderProgressTracker {
 export type ProgressStep =
   | 'CREATED'
   | 'PAYMENT_PENDING'
+  | 'PAYMENT_UPLOADED'
   | 'PAYMENT_VERIFIED'
   | 'QUEUED'
   | 'BOT_ASSIGNED'

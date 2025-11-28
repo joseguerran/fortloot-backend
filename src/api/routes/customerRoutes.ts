@@ -35,6 +35,13 @@ router.get(
   asyncHandler(CustomerController.verifyFriendship)
 );
 
+// Get current customer data using session token (public - uses sessionToken auth)
+router.get(
+  '/me',
+  publicRateLimiter,
+  asyncHandler(CustomerController.getMe)
+);
+
 // Protected routes (require authentication)
 router.use(authenticate);
 router.use(apiRateLimiter);

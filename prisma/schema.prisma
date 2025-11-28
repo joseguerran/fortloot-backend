@@ -40,23 +40,43 @@ model Bot {
 }
 
 model Customer {
-  id              String       @id @default(uuid())
-  epicAccountId   String       @unique
-  email           String
-  sessionToken    String?      @unique
-  tier            CustomerTier @default(REGULAR)
-  isBlacklisted   Boolean      @default(false)
-  blacklistReason String?
-  totalOrders     Int          @default(0)
-  totalSpent      Float        @default(0)
-  lifetimeValue   Float        @default(0)
-  createdAt       DateTime     @default(now())
-  updatedAt       DateTime     @updatedAt
-  friendships     Friendship[]
-  orders          Order[]
+  id                String       @id @default(uuid())
+  epicAccountId     String?      @unique  // UUID real de Epic Games (opcional - solo cuando hay friendship verificada)
+  displayName       String       @unique  // Nombre de usuario de Fortnite (OBLIGATORIO, identificador primario)
+  email             String?      // Opcional - usado si contactPreference es EMAIL
+  phoneNumber       String?      // Opcional - usado si contactPreference es WHATSAPP
+  contactPreference ContactType  @default(WHATSAPP)
+  sessionToken      String?      @unique
+  tier              CustomerTier @default(REGULAR)
+  isBlacklisted     Boolean      @default(false)
+  blacklistReason   String?
+  totalOrders       Int          @default(0)
+  totalSpent        Float        @default(0)
+  lifetimeValue     Float        @default(0)
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  friendships       Friendship[]
+  orders            Order[]
+  otpCodes          OTPCode[]
 
   @@index([email])
+  @@index([phoneNumber])
+  @@index([displayName])
   @@index([tier, isBlacklisted])
+}
+
+model OTPCode {
+  id         String      @id @default(uuid())
+  customerId String
+  code       String      // Código de 6 dígitos
+  type       ContactType // EMAIL o WHATSAPP
+  expiresAt  DateTime    // Expira en 3 minutos
+  usedAt     DateTime?
+  createdAt  DateTime    @default(now())
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  @@index([customerId, code])
+  @@index([expiresAt])
 }
 
 model Friendship {
@@ -83,60 +103,68 @@ model Friendship {
 
 model Order {
   id                    String        @id @default(uuid())
-  customerEpicId        String
-  customerName          String
-  customerEmail         String?
-  productId             String
-  productName           String
-  productType           ProductType
-  itemId                String
-  quantity              Int           @default(1)
-  price                 Float
-  currency              String        @default("USD")
+  orderNumber           String        @unique
+
+  // Customer relation (ÚNICO campo de cliente - FK)
+  customerId            String
+  customer              Customer      @relation(fields: [customerId], references: [id])
+
+  // Estado
   status                OrderStatus   @default(PENDING)
   priority              OrderPriority @default(NORMAL)
+
+  // Totales (calculados de OrderItems)
+  basePrice             Float
+  discountAmount        Float         @default(0)
+  profitAmount          Float
+  finalPrice            Float
+  currency              String        @default("USD")
+
+  // Bot y procesamiento
   assignedBotId         String?
   assignedAt            DateTime?
   attempts              Int           @default(0)
   maxAttempts           Int           @default(3)
   lastAttemptAt         DateTime?
+  reassignmentCount     Int           @default(0)
+
+  // Tiempos
   estimatedDelivery     DateTime?
   completedAt           DateTime?
   failedAt              DateTime?
+  expiresAt             DateTime?
+  checkoutStartedAt     DateTime?
+
+  // Pago
+  paymentMethod         String?
+  paymentProofUrl       String?
+  paymentUploadedAt     DateTime?
+  paymentVerifiedAt     DateTime?
+  paymentVerifiedBy     String?
+  paymentRejectedReason String?
+  paymentNotes          String?
+  transactionId         String?
+
+  // Estado y errores
   failureReason         String?
+
+  // Tracking de progreso
+  progressSteps         Json?
+  currentStep           String?
+
+  // Flags
+  hasManualItems        Boolean       @default(false)
+
+  // Metadata
   metadata              Json?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
-  basePrice             Float
-  customerId            String?
-  discountAmount        Float         @default(0)
-  expiresAt             DateTime?
-  finalPrice            Float
-  orderNumber           String        @unique
-  paymentMethod         String?
-  paymentProof          String?
-  paymentRejectedReason String?
-  paymentVerifiedAt     DateTime?
-  paymentVerifiedBy     String?
-  profitAmount          Float
-  paymentNotes          String?
-  paymentProofUrl       String?
-  paymentUploadedAt     DateTime?
-  transactionId         String?
-  progressSteps         Json?         // Array de pasos de progreso para tracking
-  currentStep           String?       // Descripción del paso actual
-  reassignmentCount     Int           @default(0) // Cuántas veces se reasignó el bot
-  epicAccountIdConfirmed String?      // Epic Account ID confirmado por el usuario en checkout
-  emailConfirmed        String?       // Email confirmado por el usuario en checkout
-  checkoutStartedAt     DateTime?     // Cuando el usuario inició el proceso de checkout
-  hasManualItems        Boolean       @default(false) // Si la orden contiene items manuales
-  gifts                 Gift[]
-  customer              Customer?     @relation(fields: [customerId], references: [id])
+
+  // Relaciones
   orderItems            OrderItem[]
+  gifts                 Gift[]
 
   @@index([status, priority])
-  @@index([status, assignedBotId])
-  @@index([customerEpicId])
   @@index([customerId])
   @@index([assignedBotId])
   @@index([createdAt])
@@ -388,12 +416,14 @@ model PaymentMethod {
 
 model Blacklist {
   id            String   @id @default(uuid())
-  epicAccountId String   @unique
+  displayName   String   @unique  // User's Fortnite display name (primary identifier)
+  epicAccountId String?  @unique  // Epic Account ID (optional, for verified accounts)
   email         String?
   reason        String
   blockedBy     String
   createdAt     DateTime @default(now())
 
+  @@index([displayName])
   @@index([epicAccountId])
   @@index([email])
 }
@@ -432,6 +462,11 @@ enum CustomerTier {
   REGULAR
   VIP
   PREMIUM
+}
+
+enum ContactType {
+  EMAIL
+  WHATSAPP
 }
 
 enum FriendshipStatus {
@@ -546,6 +581,7 @@ enum AuditAction {
   PAYMENT_METHOD_DELETE
   PAYMENT_METHOD_TOGGLE
   PAYMENT_METHOD_REORDER
+  WHATSAPP_CONFIG_UPDATE
 }
 
 enum BotActivityType {

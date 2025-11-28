@@ -60,25 +60,35 @@ export interface GiftJobData extends QueueJobData {
 }
 
 export interface OrderCreateRequest {
-  customerEpicId: string;
-  customerName: string;
-  customerEmail?: string;
-  productId: string;
-  productName: string;
-  productType: string;
-  itemId: string;
-  quantity?: number;
-  price: number;
-  currency?: string;
-  priority?: string;
+  customerId: string;  // Required - customer ID
+  items: Array<{
+    catalogItemId: string;
+    name: string;
+    type: string;
+    quantity: number;
+    priceAtPurchase: number;
+  }>;
+  totalAmount: number;
+  subtotalAmount: number;
+  discountAmount?: number;
+  profitAmount?: number;
+  checkoutStartedAt?: string;
+  hasManualItems?: boolean;
 }
 
 export interface OrderStatusResponse {
   id: string;
   status: string;
   priority: string;
-  customerName: string;
-  productName: string;
+  customer?: {
+    displayName: string;
+    epicAccountId?: string;
+    email?: string;
+  };
+  orderItems?: Array<{
+    productName: string;
+    productType: string;
+  }>;
   estimatedDelivery?: Date;
   completedAt?: Date;
   failureReason?: string;
@@ -221,7 +231,9 @@ export interface PricingConfigUpdate {
 // Customer types
 export interface CustomerSession {
   epicAccountId: string;
-  email: string;
+  contactPreference: 'EMAIL' | 'WHATSAPP';
+  email?: string;       // Requerido si contactPreference es EMAIL
+  phoneNumber?: string; // Requerido si contactPreference es WHATSAPP
   cartItems?: Array<{
     type: string;
   }>;
@@ -231,7 +243,9 @@ export interface CustomerResponse {
   id: string;
   epicAccountId: string;
   displayName?: string;
-  email: string;
+  email?: string;
+  phoneNumber?: string;
+  contactPreference: 'EMAIL' | 'WHATSAPP';
   tier: string;
   isBlacklisted: boolean;
   totalOrders: number;
@@ -323,7 +337,9 @@ export interface PaymentVerificationRequest {
 }
 
 export interface OrderWithPaymentRequest {
-  customerEpicId: string;
+  customerId: string;  // Required - customer ID
+  // Legacy fields - deprecated
+  customerEpicId?: string;
   customerEmail?: string;
   productId: string;
   productName: string;

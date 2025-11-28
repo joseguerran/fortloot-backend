@@ -22,8 +22,10 @@ export const validate = (schema: ZodSchema) => {
 
 // Common validation schemas
 export const orderCreateSchema = z.object({
-  customerEpicId: z.string().min(1, 'Customer Epic ID is required'),
-  customerName: z.string().min(1, 'Customer name is required'),
+  customerId: z.string().min(1, 'Customer ID is required'),
+  // Legacy fields - deprecated, optional for backward compatibility
+  customerEpicId: z.string().optional(),
+  customerName: z.string().optional(),
   customerEmail: z.string().email().optional(),
   productId: z.string().min(1, 'Product ID is required'),
   productName: z.string().min(1, 'Product name is required'),

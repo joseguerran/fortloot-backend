@@ -88,8 +88,13 @@ export class PaymentController {
         paymentProofUrl,
         paymentNotes: notes,
         paymentUploadedAt: new Date(),
+        currentStep: 'Comprobante subido. Esperando verificación del pago.',
       },
     });
+
+    // Track progress
+    const { OrderProgressTracker } = await import('../../services/OrderProgressTracker');
+    await OrderProgressTracker.update(orderId, 'PAYMENT_UPLOADED', 'Comprobante de pago subido');
 
     log.info(`Payment proof uploaded for order ${order.orderNumber}`);
 
@@ -138,8 +143,10 @@ export class PaymentController {
           customer: {
             select: {
               id: true,
+              displayName: true,
               epicAccountId: true,
               email: true,
+              phoneNumber: true,
               tier: true,
               isBlacklisted: true,
             },

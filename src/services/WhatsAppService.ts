@@ -101,4 +101,25 @@ export class WhatsAppService {
 
     return this.sendMessage(this.adminPhone!, message);
   }
+
+  /**
+   * Envía código OTP al cliente vía WhatsApp
+   * Este método NO requiere que esté habilitado para admin, solo WAHA
+   */
+  static async sendOTP(phone: string, code: string): Promise<boolean> {
+    if (!this.wahaUrl) {
+      log.error('WhatsApp OTP disabled: WAHA_API_URL not configured');
+      return false;
+    }
+
+    const message = `🔐 *FortLoot - Código de Verificación*
+
+Tu código es: *${code}*
+
+⏰ Este código expira en 3 minutos.
+
+Si no solicitaste este código, ignora este mensaje.`;
+
+    return this.sendMessage(phone, message);
+  }
 }

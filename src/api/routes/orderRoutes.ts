@@ -13,7 +13,10 @@ import {
 
 const router = Router();
 
-// All routes require authentication
+// Public route: Get order by orderNumber (for email links)
+router.get('/number/:orderNumber', asyncHandler(OrderController.getOrderByNumber));
+
+// All other routes require authentication
 router.use(authenticate);
 
 // Create new order

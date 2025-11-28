@@ -9,10 +9,26 @@ export const createCustomerSessionSchema = z.object({
     epicAccountId: z.string()
       .min(1, 'Epic Account ID is required')
       .max(100, 'Epic Account ID too long'),
+    contactPreference: z.enum(['EMAIL', 'WHATSAPP'], {
+      errorMap: () => ({ message: 'Contact preference must be EMAIL or WHATSAPP' }),
+    }),
     email: z.string()
       .email('Invalid email format')
-      .max(255, 'Email too long'),
-  }),
+      .max(255, 'Email too long')
+      .optional(),
+    phoneNumber: z.string()
+      .min(8, 'Phone number too short')
+      .max(20, 'Phone number too long')
+      .regex(/^\+?[0-9\s-]+$/, 'Invalid phone number format')
+      .optional(),
+  }).refine(
+    (data) => {
+      if (data.contactPreference === 'EMAIL') return !!data.email;
+      if (data.contactPreference === 'WHATSAPP') return !!data.phoneNumber;
+      return false;
+    },
+    { message: 'Must provide email (for EMAIL preference) or phone number (for WHATSAPP preference)' }
+  ),
 });
 
 export const verifyFriendshipSchema = z.object({
@@ -363,5 +379,39 @@ export const getTopProductsSchema = z.object({
 export const getDailyTrendSchema = z.object({
   query: z.object({
     days: z.string().regex(/^\d+$/).optional(),
+  }),
+});
+
+/**
+ * OTP Schemas
+ */
+export const requestOTPSchema = z.object({
+  body: z.object({
+    identifier: z.string()
+      .min(1, 'Email o número de teléfono es requerido')
+      .max(255, 'Identificador muy largo'),
+    type: z.enum(['EMAIL', 'WHATSAPP'], {
+      errorMap: () => ({ message: 'Tipo debe ser EMAIL o WHATSAPP' }),
+    }),
+  }),
+});
+
+export const verifyOTPSchema = z.object({
+  body: z.object({
+    identifier: z.string()
+      .min(1, 'Email o número de teléfono es requerido')
+      .max(255, 'Identificador muy largo'),
+    type: z.enum(['EMAIL', 'WHATSAPP'], {
+      errorMap: () => ({ message: 'Tipo debe ser EMAIL o WHATSAPP' }),
+    }),
+    code: z.string()
+      .length(6, 'El código debe ser de 6 dígitos')
+      .regex(/^\d{6}$/, 'El código debe contener solo dígitos'),
+  }),
+});
+
+export const getCustomerOrdersSchema = z.object({
+  params: z.object({
+    customerId: z.string().uuid('ID de cliente inválido'),
   }),
 });

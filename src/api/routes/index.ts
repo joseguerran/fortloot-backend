@@ -13,6 +13,7 @@ import { paymentRoutes } from './paymentRoutes';
 import { paymentMethodRoutes } from './paymentMethodRoutes';
 import { kpiRoutes } from './kpiRoutes';
 import { configRoutes } from './configRoutes';
+import { otpRoutes } from './otpRoutes';
 import logRoutes from './logs';
 import { authenticate } from '../middleware/auth';
 
@@ -59,5 +60,6 @@ router.use('/payment-methods', paymentMethodRoutes);
 router.use('/kpis', kpiRoutes);
 router.use('/config', configRoutes);
 router.use('/logs', logRoutes);
+router.use('/otp', otpRoutes);
 
 export default router;

@@ -79,7 +79,7 @@ export class AnalyticsController {
     // Calculate revenue
     const totalRevenue = orders
       .filter((o) => o.status === 'COMPLETED')
-      .reduce((sum, order) => sum + order.price, 0);
+      .reduce((sum, order) => sum + order.finalPrice, 0);
     const avgOrderValue = completedOrders > 0 ? totalRevenue / completedOrders : 0;
 
     const metrics: MetricsResponse = {
@@ -216,19 +216,28 @@ export class AnalyticsController {
       select: {
         id: true,
         orderNumber: true,
-        customerEpicId: true,
-        customerName: true,
-        customerEmail: true,
-        epicAccountIdConfirmed: true,
-        emailConfirmed: true,
-        productName: true,
-        productType: true,
         finalPrice: true,
         hasManualItems: true,
         status: true,
         checkoutStartedAt: true,
         createdAt: true,
         expiresAt: true,
+        // Customer relation for normalized data access
+        customer: {
+          select: {
+            displayName: true,
+            epicAccountId: true,
+            email: true,
+          },
+        },
+        // OrderItems for product info
+        orderItems: {
+          select: {
+            productName: true,
+            productType: true,
+          },
+          take: 1,
+        },
       },
     });
 
@@ -268,7 +277,7 @@ export class AnalyticsController {
 
     // Orders with captured data (valuable for follow-up)
     const ordersWithContact = abandonedOrders.filter(
-      o => o.epicAccountIdConfirmed || o.emailConfirmed
+      o => o.customer?.epicAccountId || o.customer?.email
     );
 
     res.json({
@@ -288,17 +297,17 @@ export class AnalyticsController {
         abandonedOrders: abandonedOrders.map(order => ({
           id: order.id,
           orderNumber: order.orderNumber,
-          customerName: order.customerName,
-          epicAccountId: order.epicAccountIdConfirmed || order.customerEpicId,
-          email: order.emailConfirmed || order.customerEmail,
-          productName: order.productName,
-          productType: order.productType,
+          customerName: order.customer?.displayName || 'Unknown',
+          epicAccountId: order.customer?.epicAccountId || null,
+          email: order.customer?.email || null,
+          productName: order.orderItems[0]?.productName || 'Unknown',
+          productType: order.orderItems[0]?.productType || 'OTHER',
           price: order.finalPrice,
           hasManualItems: order.hasManualItems,
           status: order.status,
           checkoutStartedAt: order.checkoutStartedAt,
           expiresAt: order.expiresAt,
-          hasContactInfo: !!(order.epicAccountIdConfirmed || order.emailConfirmed),
+          hasContactInfo: !!(order.customer?.epicAccountId || order.customer?.email),
         })),
       },
     });

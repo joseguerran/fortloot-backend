@@ -12,13 +12,88 @@ import crypto from 'crypto';
 
 export class CustomerController {
   /**
+   * Get current customer data using sessionToken
+   * This is the secure way to fetch customer data - client should only store sessionToken
+   */
+  static async getMe(req: Request, res: Response) {
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({
+        success: false,
+        error: 'UNAUTHORIZED',
+        message: 'Session token required',
+      });
+    }
+
+    const sessionToken = authHeader.split(' ')[1];
+
+    const customer = await prisma.customer.findUnique({
+      where: { sessionToken },
+    });
+
+    if (!customer) {
+      return res.status(401).json({
+        success: false,
+        error: 'INVALID_SESSION',
+        message: 'Invalid or expired session',
+      });
+    }
+
+    if (customer.isBlacklisted) {
+      return res.status(403).json({
+        success: false,
+        error: 'CUSTOMER_BLACKLISTED',
+        message: 'Tu cuenta ha sido bloqueada. Contacta soporte.',
+      });
+    }
+
+    // Return only necessary data for frontend operations
+    const response: CustomerResponse = {
+      id: customer.id,
+      epicAccountId: customer.epicAccountId,
+      displayName: customer.displayName || undefined,
+      email: customer.email || undefined,
+      phoneNumber: customer.phoneNumber || undefined,
+      contactPreference: customer.contactPreference as 'EMAIL' | 'WHATSAPP',
+      tier: customer.tier,
+      isBlacklisted: customer.isBlacklisted,
+      totalOrders: customer.totalOrders,
+      totalSpent: customer.totalSpent,
+      lifetimeValue: customer.lifetimeValue,
+      createdAt: customer.createdAt,
+    };
+
+    res.json({
+      success: true,
+      data: response,
+    });
+  }
+
+  /**
    * Create customer session
    */
   static async createSession(req: Request, res: Response) {
-    const { epicAccountId, email, cartItems } = req.body as CustomerSession;
+    const { epicAccountId, contactPreference, email, phoneNumber, cartItems } = req.body as CustomerSession;
 
-    // Preserve the display name (what user entered)
-    let displayName: string | undefined = epicAccountId;
+    // Validar que se proporcione el medio de contacto correcto según preferencia
+    if (contactPreference === 'EMAIL' && !email) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'Email es requerido cuando la preferencia es EMAIL',
+      });
+    }
+    if (contactPreference === 'WHATSAPP' && !phoneNumber) {
+      return res.status(400).json({
+        success: false,
+        error: 'VALIDATION_ERROR',
+        message: 'Número de WhatsApp es requerido cuando la preferencia es WHATSAPP',
+      });
+    }
+
+    // Preserve the display name (what user entered) - normalized to lowercase
+    let displayName: string | undefined = epicAccountId?.toLowerCase();
 
     // Check blacklist
     const blacklisted = await prisma.blacklist.findUnique({
@@ -82,7 +157,7 @@ export class CustomerController {
 
       // Get the actual Epic Account ID and displayName from the friendship record
       actualEpicAccountId = readyFriendships[0].epicAccountId;
-      displayName = readyFriendships[0].displayName;
+      displayName = readyFriendships[0].displayName?.toLowerCase();
       log.info(`Resolved displayName ${epicAccountId} to epicAccountId ${actualEpicAccountId}`);
     }
 
@@ -98,12 +173,15 @@ export class CustomerController {
       customer = await prisma.customer.create({
         data: {
           epicAccountId: actualEpicAccountId,
-          email,
+          displayName: displayName || null,
+          contactPreference,
+          email: email || null,
+          phoneNumber: phoneNumber || null,
           sessionToken,
         },
       });
 
-      log.info(`New customer created: ${actualEpicAccountId}`);
+      log.info(`New customer created: ${actualEpicAccountId} (contact: ${contactPreference})`);
     } else if (customer.isBlacklisted) {
       return res.status(403).json({
         success: false,
@@ -111,11 +189,26 @@ export class CustomerController {
         message: 'Tu cuenta ha sido bloqueada. Contacta soporte.',
       });
     } else {
-      // Update email if changed
-      if (customer.email !== email) {
+      // Actualizar datos de contacto si cambiaron
+      const updates: any = {};
+      if (contactPreference !== customer.contactPreference) {
+        updates.contactPreference = contactPreference;
+      }
+      if (email && customer.email !== email) {
+        updates.email = email;
+      }
+      if (phoneNumber && customer.phoneNumber !== phoneNumber) {
+        updates.phoneNumber = phoneNumber;
+      }
+      // Actualizar displayName si no lo tiene
+      if (displayName && !customer.displayName) {
+        updates.displayName = displayName;
+      }
+
+      if (Object.keys(updates).length > 0) {
         customer = await prisma.customer.update({
           where: { id: customer.id },
-          data: { email },
+          data: updates,
         });
       }
     }
@@ -124,7 +217,9 @@ export class CustomerController {
       id: customer.id,
       epicAccountId: customer.epicAccountId,
       displayName: displayName,
-      email: customer.email,
+      email: customer.email || undefined,
+      phoneNumber: customer.phoneNumber || undefined,
+      contactPreference: customer.contactPreference as 'EMAIL' | 'WHATSAPP',
       tier: customer.tier,
       isBlacklisted: customer.isBlacklisted,
       totalOrders: customer.totalOrders,
@@ -237,9 +332,14 @@ export class CustomerController {
             status: 'COMPLETED',
           },
           select: {
-            productName: true,
             finalPrice: true,
             createdAt: true,
+            orderItems: {
+              select: {
+                productName: true,
+              },
+              take: 1,
+            },
           },
         },
         friendships: {
@@ -268,11 +368,12 @@ export class CustomerController {
       { orderCount: number; totalSpent: number }
     >();
     customer.orders.forEach((order) => {
-      const existing = productMap.get(order.productName) || {
+      const productName = order.orderItems[0]?.productName || 'Unknown';
+      const existing = productMap.get(productName) || {
         orderCount: 0,
         totalSpent: 0,
       };
-      productMap.set(order.productName, {
+      productMap.set(productName, {
         orderCount: existing.orderCount + 1,
         totalSpent: existing.totalSpent + order.finalPrice,
       });
@@ -304,6 +405,7 @@ export class CustomerController {
         id: customer.id,
         epicAccountId: customer.epicAccountId,
         email: customer.email,
+        contactPreference: customer.contactPreference,
         tier: customer.tier,
         isBlacklisted: customer.isBlacklisted,
         totalOrders: customer.totalOrders,
@@ -422,8 +524,9 @@ export class CustomerController {
 
     // Add to blacklist table
     await prisma.blacklist.upsert({
-      where: { epicAccountId: customer.epicAccountId },
+      where: { displayName: customer.displayName },
       create: {
+        displayName: customer.displayName,
         epicAccountId: customer.epicAccountId,
         email: customer.email,
         reason,

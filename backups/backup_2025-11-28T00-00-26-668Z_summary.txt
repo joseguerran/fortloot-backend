@@ -1,0 +1,19 @@
+Backup Summary - 2025-11-28T00:00:35.378Z
+==================================================
+
+bots: 2 records
+customers: 3 records
+orders: 11 records
+orderItems: 12 records
+friendships: 4 records
+gifts: 1 records
+blacklist: 0 records
+config: 7 records
+pricingConfig: 1 records
+paymentMethods: 5 records
+catalogItems: 900 records
+users: 2 records
+otpCodes: 9 records
+
+==================================================
+Total tables backed up: 13
