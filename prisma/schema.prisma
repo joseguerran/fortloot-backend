@@ -58,6 +58,7 @@ model Customer {
   friendships       Friendship[]
   orders            Order[]
   otpCodes          OTPCode[]
+  consentRecords    ConsentRecord[]
 
   @@index([email])
   @@index([phoneNumber])
@@ -426,6 +427,37 @@ model Blacklist {
   @@index([displayName])
   @@index([epicAccountId])
   @@index([email])
+}
+
+// GDPR Consent Records - Para evidencia legal de consentimientos
+model ConsentRecord {
+  id            String   @id @default(cuid())
+
+  // Identificación (sin requerir login)
+  sessionId     String   // Hash del fingerprint del browser
+  customerId    String?  // Si está autenticado, vincular
+
+  // Datos del consentimiento
+  necessary     Boolean  @default(true)
+  preferences   Boolean  @default(false)
+  analytics     Boolean  @default(false)
+  marketing     Boolean  @default(false)
+
+  // Metadatos para auditoría
+  ipHash        String   // Hash del IP (no guardar IP real - GDPR)
+  userAgent     String?  // Browser/dispositivo
+  policyVersion String   // Versión de la política aceptada (ej: "1.0")
+
+  // Timestamps
+  consentedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  // Relación opcional con Customer
+  customer      Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([sessionId])
+  @@index([customerId])
+  @@index([consentedAt])
 }
 
 model BusinessMetric {

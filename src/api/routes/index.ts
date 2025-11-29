@@ -14,6 +14,7 @@ import { paymentMethodRoutes } from './paymentMethodRoutes';
 import { kpiRoutes } from './kpiRoutes';
 import { configRoutes } from './configRoutes';
 import { otpRoutes } from './otpRoutes';
+import { consentRoutes } from './consentRoutes';
 import logRoutes from './logs';
 import { authenticate } from '../middleware/auth';
 
@@ -61,5 +62,6 @@ router.use('/kpis', kpiRoutes);
 router.use('/config', configRoutes);
 router.use('/logs', logRoutes);
 router.use('/otp', otpRoutes);
+router.use('/consent', consentRoutes);
 
 export default router;

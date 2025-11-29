@@ -69,6 +69,57 @@ export class OrderController {
       });
     }
 
+    // Define store item types that require bot friendships (same as frontend)
+    const STORE_PRODUCT_TYPES = [ProductType.SKIN, ProductType.EMOTE, ProductType.PICKAXE, ProductType.GLIDER, ProductType.BACKPACK, ProductType.WRAP];
+
+    // Check if order has store items that require friendships
+    const hasStoreItems = items?.some((item: any) => {
+      const normalizedType = normalizeProductType(item.type);
+      return STORE_PRODUCT_TYPES.includes(normalizedType);
+    });
+
+    // If order has store items, verify customer has at least one ACCEPTED friendship
+    if (hasStoreItems) {
+      const acceptedFriendships = await prisma.friendship.findMany({
+        where: {
+          OR: [
+            { epicAccountId: customer.epicAccountId },
+            { displayName: customer.displayName },
+          ],
+          status: FriendshipStatus.ACCEPTED,
+        },
+      });
+
+      if (acceptedFriendships.length === 0) {
+        log.warn(`Order rejected: Customer ${customer.displayName || customer.epicAccountId} has store items but no accepted friendships`);
+
+        // Get available bots to show to user
+        const availableBots = await prisma.bot.findMany({
+          where: {
+            isActive: true,
+            status: 'ONLINE',
+          },
+          select: {
+            epicAccountId: true,
+            displayName: true,
+          },
+          take: 5,
+        });
+
+        return res.status(403).json({
+          success: false,
+          error: 'NO_BOT_FRIENDSHIP',
+          message: 'No tienes amistad aceptada con ninguno de nuestros bots. Agrega a nuestros bots como amigos en Fortnite y espera 48 horas antes de realizar tu compra.',
+          availableBots: availableBots.map(bot => ({
+            epicId: bot.epicAccountId,
+            displayName: bot.displayName,
+          })),
+        });
+      }
+
+      log.info(`Friendship validation passed for ${customer.displayName}: ${acceptedFriendships.length} accepted friendships`);
+    }
+
     // Option A: Check for existing PENDING_PAYMENT order for this customer
     // If found, reuse it instead of creating a new one
     const existingOrder = await prisma.order.findFirst({
