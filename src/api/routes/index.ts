@@ -15,6 +15,7 @@ import { kpiRoutes } from './kpiRoutes';
 import { configRoutes } from './configRoutes';
 import { otpRoutes } from './otpRoutes';
 import { consentRoutes } from './consentRoutes';
+import { announcementRoutes } from './announcementRoutes';
 import logRoutes from './logs';
 import { authenticate } from '../middleware/auth';
 
@@ -63,5 +64,6 @@ router.use('/config', configRoutes);
 router.use('/logs', logRoutes);
 router.use('/otp', otpRoutes);
 router.use('/consent', consentRoutes);
+router.use('/announcements', announcementRoutes);
 
 export default router;
