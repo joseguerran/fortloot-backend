@@ -16,6 +16,8 @@ import { configRoutes } from './configRoutes';
 import { otpRoutes } from './otpRoutes';
 import { consentRoutes } from './consentRoutes';
 import { announcementRoutes } from './announcementRoutes';
+import { cryptoPaymentRoutes } from './cryptoPaymentRoutes';
+import { webhookRoutes } from './webhookRoutes';
 import logRoutes from './logs';
 import { authenticate } from '../middleware/auth';
 
@@ -65,5 +67,7 @@ router.use('/logs', logRoutes);
 router.use('/otp', otpRoutes);
 router.use('/consent', consentRoutes);
 router.use('/announcements', announcementRoutes);
+router.use('/crypto', cryptoPaymentRoutes);
+router.use('/webhooks', webhookRoutes);
 
 export default router;
