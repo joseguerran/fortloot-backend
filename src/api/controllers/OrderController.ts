@@ -75,7 +75,7 @@ export class OrderController {
     // Check if order has store items that require friendships
     const hasStoreItems = items?.some((item: any) => {
       const normalizedType = normalizeProductType(item.type);
-      return STORE_PRODUCT_TYPES.includes(normalizedType);
+      return (STORE_PRODUCT_TYPES as ProductType[]).includes(normalizedType);
     });
 
     // If order has store items, verify customer has at least one ACCEPTED friendship
