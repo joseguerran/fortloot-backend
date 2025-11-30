@@ -130,11 +130,11 @@ export class AnnouncementController {
         endsAt,
       } = req.body;
 
-      // Validate required fields
-      if (!type || !title || !message) {
+      // Validate required fields (only type is required, title and message are optional)
+      if (!type) {
         res.status(400).json({
           success: false,
-          error: 'type, title, and message are required',
+          error: 'type is required',
         });
         return;
       }
@@ -317,6 +317,47 @@ export class AnnouncementController {
       res.status(500).json({
         success: false,
         error: error.message || 'Failed to delete announcement',
+      });
+    }
+  }
+
+  /**
+   * Upload image for announcement (admin)
+   * POST /api/announcements/upload-image
+   * Converts image to base64 data URI for storage in database
+   */
+  static async uploadImage(req: Request, res: Response): Promise<void> {
+    try {
+      const file = req.file;
+
+      if (!file) {
+        res.status(400).json({
+          success: false,
+          error: 'No image file provided',
+        });
+        return;
+      }
+
+      // Convert buffer to base64 data URI
+      const base64 = file.buffer.toString('base64');
+      const mimeType = file.mimetype || 'image/jpeg';
+      const dataUri = `data:${mimeType};base64,${base64}`;
+
+      log.info(`Announcement image converted to base64 by user ${(req as any).user?.email || 'unknown'} (size: ${Math.round(file.size / 1024)}KB)`);
+
+      res.json({
+        success: true,
+        data: {
+          url: dataUri,
+          size: file.size,
+          mimeType,
+        },
+      });
+    } catch (error: any) {
+      log.error('Error uploading announcement image:', error);
+      res.status(500).json({
+        success: false,
+        error: error.message || 'Failed to upload image',
       });
     }
   }

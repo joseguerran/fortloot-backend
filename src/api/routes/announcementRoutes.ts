@@ -3,9 +3,26 @@ import { AnnouncementController } from '../controllers/AnnouncementController';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/rbac';
-import { publicRateLimiter, apiRateLimiter } from '../middleware/rateLimiter';
+import { publicRateLimiter, apiRateLimiter, uploadRateLimiter } from '../middleware/rateLimiter';
+import multer from 'multer';
 
 const router = Router();
+
+// Configure multer for image uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: {
+    fileSize: 5 * 1024 * 1024, // 5MB max
+  },
+  fileFilter: (req, file, cb) => {
+    // Accept only images
+    if (file.mimetype.startsWith('image/')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Solo se permiten imágenes'));
+    }
+  },
+});
 
 // ============================================================================
 // Public routes (no authentication required)
@@ -67,6 +84,14 @@ router.post(
 router.delete(
   '/:id',
   asyncHandler(AnnouncementController.delete)
+);
+
+// Upload image for announcement (admin)
+router.post(
+  '/upload-image',
+  uploadRateLimiter,
+  upload.single('image'),
+  asyncHandler(AnnouncementController.uploadImage)
 );
 
 export { router as announcementRoutes };

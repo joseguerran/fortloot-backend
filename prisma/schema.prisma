@@ -464,8 +464,8 @@ model ConsentRecord {
 model Announcement {
   id          String           @id @default(cuid())
   type        AnnouncementType
-  title       String
-  message     String
+  title       String?
+  message     String?
   imageUrl    String?          // Solo para PROMOTION
   productId   String?          // Referencia opcional a CatalogItem
   product     CatalogItem?     @relation(fields: [productId], references: [id], onDelete: SetNull)
