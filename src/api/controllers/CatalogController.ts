@@ -18,6 +18,8 @@ export class CatalogController {
   /**
    * Sync catalog logic (can be called directly without HTTP context)
    * Returns sync result data
+   *
+   * OPTIMIZED: Uses batch operations instead of individual queries for performance
    */
   static async syncCatalogFromAPI() {
     log.info('Starting catalog update from Fortnite API...');
@@ -25,14 +27,14 @@ export class CatalogController {
     // Fetch items from Fortnite API
     const apiItems = await FortniteAPIService.fetchItemShop();
 
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const shopClosesAt = FortniteAPIService.getShopRotationTime();
+
     if (apiItems.length === 0) {
       log.warn('No items fetched from Fortnite API. Using existing active items as fallback.');
 
       // FALLBACK: If API fails, link existing active items to today's catalog
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      const shopClosesAt = FortniteAPIService.getShopRotationTime();
-
       // Get or create today's catalog
       let catalog = await prisma.dailyCatalog.findUnique({
         where: { date: today },
@@ -51,33 +53,34 @@ export class CatalogController {
       // Get all active items (both API and custom)
       const activeItems = await prisma.catalogItem.findMany({
         where: { isActive: true },
+        select: { id: true, isCustom: true },
       });
 
-      // Link all active items to today's catalog
-      let linked = 0;
-      for (const item of activeItems) {
-        await prisma.dailyCatalogItem.upsert({
-          where: {
-            catalogId_itemId: {
-              catalogId: catalog.id,
+      // Batch link all active items to today's catalog using transaction
+      await prisma.$transaction(
+        activeItems.map(item =>
+          prisma.dailyCatalogItem.upsert({
+            where: {
+              catalogId_itemId: {
+                catalogId: catalog!.id,
+                itemId: item.id,
+              },
+            },
+            create: {
+              catalogId: catalog!.id,
               itemId: item.id,
             },
-          },
-          create: {
-            catalogId: catalog.id,
-            itemId: item.id,
-          },
-          update: {},
-        });
-        linked++;
-      }
+            update: {},
+          })
+        )
+      );
 
-      log.info(`Fallback: Linked ${linked} existing active items to today's catalog`);
+      log.info(`Fallback: Linked ${activeItems.length} existing active items to today's catalog`);
 
       return {
         success: true,
         catalogId: catalog.id,
-        itemCount: linked,
+        itemCount: activeItems.length,
         apiItems: 0,
         customItems: activeItems.filter(i => i.isCustom).length,
         message: 'Using existing active items (API returned no items)',
@@ -85,54 +88,44 @@ export class CatalogController {
       };
     }
 
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
-    // Get shop rotation time from Fortnite API
-    const shopClosesAt = FortniteAPIService.getShopRotationTime();
+    log.info(`Processing ${apiItems.length} items from API...`);
 
     // Get or create today's catalog
-    let catalog = await prisma.dailyCatalog.findUnique({
+    let catalog = await prisma.dailyCatalog.upsert({
       where: { date: today },
+      create: {
+        date: today,
+        shopClosesAt,
+      },
+      update: { shopClosesAt },
     });
 
-    if (!catalog) {
-      catalog = await prisma.dailyCatalog.create({
-        data: {
-          date: today,
-          shopClosesAt,
-        },
-      });
-      log.info(`Created new catalog for ${today.toISOString()}`);
-    } else {
-      // Update shop closes at time
-      catalog = await prisma.dailyCatalog.update({
-        where: { id: catalog.id },
-        data: { shopClosesAt },
-      });
-    }
+    // OPTIMIZATION: Fetch ALL existing non-custom items in ONE query
+    const existingItems = await prisma.catalogItem.findMany({
+      where: { isCustom: false },
+      select: { id: true, itemId: true, isActive: true },
+    });
 
-    let newItems = 0;
-    let updatedItems = 0;
-    let deactivatedItems = 0;
+    // Create lookup map for fast access
+    const existingItemMap = new Map(
+      existingItems.map(item => [item.itemId, item])
+    );
 
     // Track item IDs from API
     const apiItemIds = new Set(apiItems.map(item => item.itemId));
 
-    // Process each API item
+    // Separate items into new and existing
+    const itemsToCreate: any[] = [];
+    const itemsToUpdate: { id: string; data: any }[] = [];
+    const catalogLinksToCreate: string[] = []; // item IDs to link
+
     for (const apiItem of apiItems) {
-      // Check if item already exists
-      const existing = await prisma.catalogItem.findFirst({
-        where: {
-          itemId: apiItem.itemId,
-          isCustom: false,
-        },
-      });
+      const existing = existingItemMap.get(apiItem.itemId);
 
       if (existing) {
-        // Update existing item
-        await prisma.catalogItem.update({
-          where: { id: existing.id },
+        // Queue update
+        itemsToUpdate.push({
+          id: existing.id,
           data: {
             offerId: apiItem.offerId,
             name: apiItem.name,
@@ -143,99 +136,135 @@ export class CatalogController {
             baseVbucks: apiItem.baseVbucks,
             inDate: new Date(apiItem.inDate),
             outDate: new Date(apiItem.outDate),
-            isActive: true, // Reactivate if it was inactive
-          },
-        });
-
-        // Associate with today's catalog
-        await prisma.dailyCatalogItem.upsert({
-          where: {
-            catalogId_itemId: {
-              catalogId: catalog.id,
-              itemId: existing.id,
-            },
-          },
-          create: {
-            catalogId: catalog.id,
-            itemId: existing.id,
-          },
-          update: {},
-        });
-
-        updatedItems++;
-      } else {
-        // Create new item
-        const newItem = await prisma.catalogItem.create({
-          data: {
-            itemId: apiItem.itemId,
-            offerId: apiItem.offerId,
-            name: apiItem.name,
-            description: apiItem.description,
-            type: apiItem.type,
-            rarity: apiItem.rarity,
-            image: apiItem.image,
-            baseVbucks: apiItem.baseVbucks,
-            inDate: new Date(apiItem.inDate),
-            outDate: new Date(apiItem.outDate),
-            isCustom: false,
             isActive: true,
           },
         });
-
-        // Associate with today's catalog
-        await prisma.dailyCatalogItem.create({
-          data: {
-            catalogId: catalog.id,
-            itemId: newItem.id,
-          },
+        catalogLinksToCreate.push(existing.id);
+      } else {
+        // Queue creation
+        itemsToCreate.push({
+          itemId: apiItem.itemId,
+          offerId: apiItem.offerId,
+          name: apiItem.name,
+          description: apiItem.description,
+          type: apiItem.type,
+          rarity: apiItem.rarity,
+          image: apiItem.image,
+          baseVbucks: apiItem.baseVbucks,
+          inDate: new Date(apiItem.inDate),
+          outDate: new Date(apiItem.outDate),
+          isCustom: false,
+          isActive: true,
         });
-
-        newItems++;
       }
     }
 
-    // Deactivate API items that are no longer in shop
-    const previousApiItems = await prisma.catalogItem.findMany({
-      where: {
-        isCustom: false,
-        isActive: true,
-      },
-    });
+    // Items to deactivate (active API items not in current shop)
+    const itemsToDeactivate = existingItems
+      .filter(item => item.isActive && item.itemId && !apiItemIds.has(item.itemId))
+      .map(item => item.id);
 
-    for (const item of previousApiItems) {
-      if (item.itemId && !apiItemIds.has(item.itemId)) {
-        await prisma.catalogItem.update({
-          where: { id: item.id },
-          data: { isActive: false },
-        });
-        deactivatedItems++;
-      }
+    log.info(`Batch operations: ${itemsToCreate.length} new, ${itemsToUpdate.length} updates, ${itemsToDeactivate.length} deactivations`);
+
+    // Execute operations in batches for better performance
+    // Using Promise.all with chunked operations instead of sequential loops
+    const BATCH_SIZE = 50;
+    const newItemIds: string[] = [];
+
+    // 1. Batch update existing items (in chunks of BATCH_SIZE)
+    for (let i = 0; i < itemsToUpdate.length; i += BATCH_SIZE) {
+      const batch = itemsToUpdate.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(item =>
+          prisma.catalogItem.update({
+            where: { id: item.id },
+            data: item.data,
+          })
+        )
+      );
+    }
+    log.info(`Updated ${itemsToUpdate.length} existing items`);
+
+    // 2. Batch create new items (in chunks of BATCH_SIZE)
+    for (let i = 0; i < itemsToCreate.length; i += BATCH_SIZE) {
+      const batch = itemsToCreate.slice(i, i + BATCH_SIZE);
+      const createdItems = await Promise.all(
+        batch.map(itemData =>
+          prisma.catalogItem.create({
+            data: itemData,
+            select: { id: true },
+          })
+        )
+      );
+      newItemIds.push(...createdItems.map(item => item.id));
+    }
+    log.info(`Created ${itemsToCreate.length} new items`);
+
+    // 3. Batch deactivate old items (single operation)
+    if (itemsToDeactivate.length > 0) {
+      await prisma.catalogItem.updateMany({
+        where: { id: { in: itemsToDeactivate } },
+        data: { isActive: false },
+      });
+      log.info(`Deactivated ${itemsToDeactivate.length} old items`);
     }
 
-    // Also add custom items to catalog
+    // 4. Link all items to today's catalog (in chunks of BATCH_SIZE)
+    const allItemIds = [...catalogLinksToCreate, ...newItemIds];
+    for (let i = 0; i < allItemIds.length; i += BATCH_SIZE) {
+      const batch = allItemIds.slice(i, i + BATCH_SIZE);
+      await Promise.all(
+        batch.map(itemId =>
+          prisma.dailyCatalogItem.upsert({
+            where: {
+              catalogId_itemId: {
+                catalogId: catalog.id,
+                itemId: itemId,
+              },
+            },
+            create: {
+              catalogId: catalog.id,
+              itemId: itemId,
+            },
+            update: {},
+          })
+        )
+      );
+    }
+    log.info(`Linked ${allItemIds.length} items to today's catalog`);
+
+    // Also add custom items to catalog (outside transaction for simplicity)
     const customItems = await prisma.catalogItem.findMany({
       where: {
         isCustom: true,
         isActive: true,
       },
+      select: { id: true },
     });
 
-    for (const customItem of customItems) {
-      await prisma.dailyCatalogItem.upsert({
-        where: {
-          catalogId_itemId: {
-            catalogId: catalog.id,
-            itemId: customItem.id,
-          },
-        },
-        create: {
-          catalogId: catalog.id,
-          itemId: customItem.id,
-        },
-        update: {},
-      });
+    if (customItems.length > 0) {
+      await prisma.$transaction(
+        customItems.map(customItem =>
+          prisma.dailyCatalogItem.upsert({
+            where: {
+              catalogId_itemId: {
+                catalogId: catalog.id,
+                itemId: customItem.id,
+              },
+            },
+            create: {
+              catalogId: catalog.id,
+              itemId: customItem.id,
+            },
+            update: {},
+          })
+        )
+      );
     }
 
+    const newItems = itemsToCreate.length;
+    const updatedItems = itemsToUpdate.length;
+    const deactivatedItems = itemsToDeactivate.length;
     const totalItems = newItems + updatedItems + customItems.length;
 
     log.info(

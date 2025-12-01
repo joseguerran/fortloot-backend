@@ -156,6 +156,28 @@ export class FortniteAPIService {
   }
 
   /**
+   * Get the best (highest) rarity from a list of items
+   */
+  private static getBestRarityFromItems(items: FortniteAPICom_Item[]): string {
+    const rarityOrder = ['common', 'uncommon', 'rare', 'epic', 'legendary', 'icon', 'marvel', 'dc', 'starwars', 'gaminglegends'];
+
+    let bestRarity = 'common';
+    let bestIndex = 0;
+
+    for (const item of items) {
+      const rarity = this.mapRarity(item.rarity?.value);
+      const index = rarityOrder.indexOf(rarity);
+
+      if (index > bestIndex) {
+        bestIndex = index;
+        bestRarity = rarity;
+      }
+    }
+
+    return bestRarity;
+  }
+
+  /**
    * Extract best image from item
    */
   private static getBestImage(item: FortniteAPICom_Item): string {
@@ -217,35 +239,69 @@ export class FortniteAPIService {
         // Skip if no valid price
         if (!entry.finalPrice || entry.finalPrice === 0) continue;
 
-        // Process each item in the entry
-        for (const item of entry.brItems) {
-          // Skip certain types
-          const excludedBackendTypes = [
-            'AthenaLoadingScreen',
-            'AthenaMusicPack',
-            'AthenaSpray',
-            'AthenaBanner',
-            'AthenaPetCarrier', // Pets
-            'CosmeticVariantToken',
-          ];
+        // Check if this is a bundle
+        if (entry.bundle) {
+          // For bundles, create a single BUNDLE item instead of individual items
+          // Use the bundle's name and image, and get the best rarity from contained items
+          const bestRarity = this.getBestRarityFromItems(entry.brItems);
 
-          if (excludedBackendTypes.includes(item.type?.backendValue)) {
-            continue;
+          // Get bundle image - prefer newDisplayAsset renderImages, then bundle.image
+          let bundleImage = entry.bundle.image;
+          if ((entry as any).newDisplayAsset?.renderImages?.[0]?.image) {
+            bundleImage = (entry as any).newDisplayAsset.renderImages[0].image;
           }
 
+          // Build description from bundle items
+          const itemNames = entry.brItems
+            .filter(item => !['AthenaLoadingScreen', 'AthenaMusicPack', 'AthenaSpray', 'AthenaBanner'].includes(item.type?.backendValue))
+            .map(item => item.name)
+            .join(', ');
+          const bundleDescription = `Includes: ${itemNames}`;
+
           parsedItems.push({
-            itemId: item.id,
+            itemId: entry.offerId, // Use offerId as unique identifier for bundles
             offerId: entry.offerId,
-            name: item.name,
-            description: item.description || '',
-            type: this.mapProductType(item.type?.backendValue),
-            rarity: this.mapRarity(item.rarity?.value),
-            image: this.getBestImage(item),
+            name: entry.bundle.name,
+            description: bundleDescription,
+            type: 'BUNDLE',
+            rarity: bestRarity,
+            image: bundleImage,
             baseVbucks: entry.finalPrice,
             giftAllowed: entry.giftable,
             inDate: entry.inDate,
             outDate: entry.outDate,
           });
+        } else {
+          // Not a bundle - process each item individually
+          for (const item of entry.brItems) {
+            // Skip certain types
+            const excludedBackendTypes = [
+              'AthenaLoadingScreen',
+              'AthenaMusicPack',
+              'AthenaSpray',
+              'AthenaBanner',
+              'AthenaPetCarrier', // Pets
+              'CosmeticVariantToken',
+            ];
+
+            if (excludedBackendTypes.includes(item.type?.backendValue)) {
+              continue;
+            }
+
+            parsedItems.push({
+              itemId: item.id,
+              offerId: entry.offerId,
+              name: item.name,
+              description: item.description || '',
+              type: this.mapProductType(item.type?.backendValue),
+              rarity: this.mapRarity(item.rarity?.value),
+              image: this.getBestImage(item),
+              baseVbucks: entry.finalPrice,
+              giftAllowed: entry.giftable,
+              inDate: entry.inDate,
+              outDate: entry.outDate,
+            });
+          }
         }
       }
 
