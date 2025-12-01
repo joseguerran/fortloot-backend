@@ -55,6 +55,20 @@ router.put(
   asyncHandler(ConfigController.setWhatsAppEnabled)
 );
 
+// Get crypto payments enabled (store needs this)
+router.get(
+  '/crypto-payments-enabled',
+  asyncHandler(ConfigController.getCryptoPaymentsEnabled)
+);
+
+// Set crypto payments enabled (admin only)
+router.put(
+  '/crypto-payments-enabled',
+  requireAdmin,
+  auditLog('CRYPTO_PAYMENTS_CONFIG_UPDATE', 'Config'),
+  asyncHandler(ConfigController.setCryptoPaymentsEnabled)
+);
+
 // Additional protected routes (require admin role)
 router.use(requireAdmin);
 

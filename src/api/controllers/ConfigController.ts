@@ -211,4 +211,45 @@ export class ConfigController {
       value: enabled
     });
   }
+
+  /**
+   * Get crypto payments enabled setting
+   * GET /api/config/crypto-payments-enabled
+   */
+  static async getCryptoPaymentsEnabled(req: Request, res: Response): Promise<void> {
+    const enabled = await ConfigService.isCryptoPaymentsEnabled();
+
+    res.json({
+      success: true,
+      enabled,
+      value: enabled
+    });
+  }
+
+  /**
+   * Set crypto payments enabled setting
+   * PUT /api/config/crypto-payments-enabled
+   */
+  static async setCryptoPaymentsEnabled(req: Request, res: Response): Promise<void> {
+    const { enabled } = req.body;
+
+    if (typeof enabled !== 'boolean') {
+      res.status(400).json({
+        success: false,
+        error: 'enabled must be a boolean value'
+      });
+      return;
+    }
+
+    const config = await ConfigService.setCryptoPaymentsEnabled(enabled);
+
+    log.info(`Crypto payments enabled updated to: ${enabled} by user ${(req as any).user?.email || 'unknown'}`);
+
+    res.json({
+      success: true,
+      data: config,
+      enabled,
+      value: enabled
+    });
+  }
 }

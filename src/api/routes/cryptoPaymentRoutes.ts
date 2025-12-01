@@ -32,6 +32,13 @@ router.get(
   asyncHandler(CryptoPaymentController.getStatus)
 );
 
+// Regenerate crypto invoice (allows changing currency/network)
+router.post(
+  '/regenerate/:orderId',
+  publicRateLimiter,
+  asyncHandler(CryptoPaymentController.regenerateInvoice)
+);
+
 // =====================================
 // Admin routes (require authentication)
 // =====================================

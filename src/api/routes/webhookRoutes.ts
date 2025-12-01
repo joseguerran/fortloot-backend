@@ -41,8 +41,9 @@ router.post('/cryptomus', async (req: Request, res: Response) => {
     }
 
     // If payment was successful, process the order automatically
-    if (result.shouldProcessOrder) {
-      await processOrderAfterCryptoPayment(payload.order_id);
+    // Use result.orderId (from our DB) instead of payload.order_id (which has timestamp suffix)
+    if (result.shouldProcessOrder && result.orderId) {
+      await processOrderAfterCryptoPayment(result.orderId);
     }
 
     res.json({ success: true, message: result.message });
@@ -72,11 +73,22 @@ async function processOrderAfterCryptoPayment(orderId: string): Promise<void> {
       return;
     }
 
-    // Check if order is already processed
-    if (order.status !== OrderStatus.PENDING_PAYMENT &&
-        order.status !== OrderStatus.PENDING) {
+    // Check if order is already processed (completed, failed, etc.)
+    // Allow EXPIRED orders to be "revived" by successful crypto payments
+    const allowedStatuses = [
+      OrderStatus.PENDING,
+      OrderStatus.PENDING_PAYMENT,
+      OrderStatus.EXPIRED, // Crypto payments can revive expired orders
+    ];
+
+    if (!allowedStatuses.includes(order.status)) {
       log.info(`Order ${order.orderNumber} already in status ${order.status}, skipping auto-process`);
       return;
+    }
+
+    // Log if we're reviving an expired order
+    if (order.status === OrderStatus.EXPIRED) {
+      log.info(`Reviving EXPIRED order ${order.orderNumber} due to successful crypto payment`);
     }
 
     // Update order to PAYMENT_VERIFIED

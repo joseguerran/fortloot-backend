@@ -190,4 +190,37 @@ export class ConfigService {
       throw error;
     }
   }
+
+  /**
+   * Get whether crypto payments are enabled
+   * Returns false by default if not configured
+   */
+  static async isCryptoPaymentsEnabled(): Promise<boolean> {
+    try {
+      const value = await this.get('crypto_payments_enabled');
+      return value === 'true';
+    } catch (error) {
+      log.error('Error fetching crypto payments enabled status:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Set whether crypto payments are enabled
+   */
+  static async setCryptoPaymentsEnabled(enabled: boolean): Promise<Config> {
+    try {
+      const config = await this.set(
+        'crypto_payments_enabled',
+        enabled.toString(),
+        'Enable crypto payments via Cryptomus'
+      );
+
+      log.info(`Crypto payments enabled changed to: ${enabled}`);
+      return config;
+    } catch (error) {
+      log.error('Error setting crypto payments enabled:', error);
+      throw error;
+    }
+  }
 }

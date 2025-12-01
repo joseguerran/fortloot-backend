@@ -121,15 +121,18 @@ export class CryptomusService {
     const webhookUrl = process.env.CRYPTOMUS_WEBHOOK_URL || `${process.env.BACKEND_URL || 'http://localhost:3001'}/api/webhooks/cryptomus`;
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+    // Use unique order_id for each invoice creation to prevent Cryptomus from returning cached/expired invoices
+    const uniqueOrderId = `${orderId}_${Date.now()}`;
+
     const payload = {
       amount: amount.toFixed(2),
       currency: 'USD',
-      order_id: orderId,
+      order_id: uniqueOrderId,
       url_callback: webhookUrl,
       url_success: `${frontendUrl}/order-status/${orderNumber}?payment=success`,
       url_return: `${frontendUrl}/order-status/${orderNumber}`,
       lifetime: 3600, // 1 hour
-      currencies: ['USDT', 'USDC'], // Only stablecoins
+      // No currencies restriction - show all available currencies from Cryptomus account
     };
 
     const sign = this.generateSign(payload, credentials.apiKey);
@@ -298,8 +301,9 @@ export class CryptomusService {
     success: boolean;
     message: string;
     shouldProcessOrder: boolean;
+    orderId?: string;
   }> {
-    const { uuid, order_id, status, txid, payment_amount, currency, network } = payload;
+    const { uuid, order_id, status, txid, payment_amount, payer_currency, network } = payload;
 
     // Find the crypto payment
     const cryptoPayment = await prisma.cryptoPayment.findUnique({
@@ -315,25 +319,26 @@ export class CryptomusService {
     const newStatus = this.mapCryptomusStatus(status);
     const isPaid = ['paid', 'paid_over'].includes(status);
 
-    // Update CryptoPayment
+    // Update CryptoPayment - use payer_currency (actual currency used) instead of currency (base USD)
     await prisma.cryptoPayment.update({
       where: { id: cryptoPayment.id },
       data: {
         status: newStatus,
         txHash: txid || cryptoPayment.txHash,
         paidAmount: payment_amount ? parseFloat(payment_amount) : cryptoPayment.paidAmount,
-        cryptoCurrency: currency || cryptoPayment.cryptoCurrency,
+        cryptoCurrency: payer_currency || cryptoPayment.cryptoCurrency,
         network: network || cryptoPayment.network,
         paidAt: isPaid ? new Date() : cryptoPayment.paidAt,
       },
     });
 
-    log.info(`CryptoPayment ${cryptoPayment.id} updated: status=${newStatus}, txid=${txid || 'none'}`);
+    log.info(`CryptoPayment ${cryptoPayment.id} updated: status=${newStatus}, currency=${payer_currency}, txid=${txid || 'none'}`);
 
     return {
       success: true,
       message: `Payment updated to ${newStatus}`,
       shouldProcessOrder: isPaid,
+      orderId: cryptoPayment.orderId, // Return the actual orderId from our DB
     };
   }
 
@@ -389,5 +394,67 @@ export class CryptomusService {
    */
   static isConfigured(): boolean {
     return !!(process.env.CRYPTOMUS_MERCHANT_ID && process.env.CRYPTOMUS_API_KEY);
+  }
+
+  /**
+   * Regenerate crypto payment invoice (allows user to change currency/network)
+   * This deletes the existing pending payment and creates a fresh invoice
+   */
+  static async regeneratePaymentForOrder(orderId: string): Promise<{
+    cryptoPayment: any;
+    paymentUrl: string;
+  }> {
+    // Get order details
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      select: { id: true, orderNumber: true, finalPrice: true, status: true },
+    });
+
+    if (!order) {
+      throw new Error('Order not found');
+    }
+
+    // Only allow regeneration for orders waiting for payment
+    if (!['PENDING', 'PENDING_PAYMENT'].includes(order.status)) {
+      throw new Error('Order is not in a valid state for payment regeneration');
+    }
+
+    // Find existing payment
+    const existingPayment = await prisma.cryptoPayment.findUnique({
+      where: { orderId },
+    });
+
+    if (existingPayment) {
+      // Only regenerate if payment is PENDING or EXPIRED (not paid, not confirming)
+      if (!['PENDING', 'EXPIRED'].includes(existingPayment.status)) {
+        throw new Error(`Cannot regenerate payment in status: ${existingPayment.status}`);
+      }
+
+      // Delete the existing payment record
+      await prisma.cryptoPayment.delete({ where: { id: existingPayment.id } });
+      log.info(`Deleted existing CryptoPayment ${existingPayment.id} for regeneration`);
+    }
+
+    // Create new invoice in Cryptomus (uses unique order_id with timestamp)
+    const invoice = await this.createInvoice(orderId, order.finalPrice, order.orderNumber);
+
+    // Create new CryptoPayment record
+    const cryptoPayment = await prisma.cryptoPayment.create({
+      data: {
+        orderId,
+        cryptomusUuid: invoice.uuid,
+        amount: order.finalPrice,
+        status: 'PENDING',
+        paymentUrl: invoice.paymentUrl,
+        expiresAt: invoice.expiresAt,
+      },
+    });
+
+    log.info(`CryptoPayment regenerated: ${cryptoPayment.id} for order ${order.orderNumber}`);
+
+    return {
+      cryptoPayment,
+      paymentUrl: invoice.paymentUrl,
+    };
   }
 }

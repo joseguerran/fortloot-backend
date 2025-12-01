@@ -103,6 +103,14 @@ async function main() {
       isActive: true,
       displayOrder: 3,
     },
+    {
+      name: 'Criptomonedas',
+      slug: 'cryptomus',
+      description: 'Pago con USDT, BTC, ETH y otras criptomonedas',
+      instructions: 'Serás redirigido a Cryptomus para completar el pago',
+      isActive: true,
+      displayOrder: 4,
+    },
   ];
 
   for (const method of paymentMethods) {
