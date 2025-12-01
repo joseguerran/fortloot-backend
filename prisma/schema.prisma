@@ -164,6 +164,7 @@ model Order {
   // Relaciones
   orderItems            OrderItem[]
   gifts                 Gift[]
+  cryptoPayment         CryptoPayment?
 
   @@index([status, priority])
   @@index([customerId])
@@ -636,6 +637,7 @@ enum AuditAction {
   PAYMENT_METHOD_TOGGLE
   PAYMENT_METHOD_REORDER
   WHATSAPP_CONFIG_UPDATE
+  CRYPTO_PAYMENTS_CONFIG_UPDATE
 }
 
 enum BotActivityType {
@@ -656,4 +658,49 @@ enum BotActivityType {
 enum AnnouncementType {
   MAINTENANCE
   PROMOTION
+}
+
+// =====================
+// Cryptomus Payments
+// =====================
+enum CryptoPaymentStatus {
+  PENDING       // Invoice created, waiting for payment
+  CONFIRMING    // Payment detected, waiting confirmations
+  PAID          // Payment confirmed (exact amount)
+  PAID_OVER     // Paid more than required
+  WRONG_AMOUNT  // Paid less than required
+  EXPIRED       // Invoice expired without payment
+  CANCELLED     // Cancelled by system or user
+  FAILED        // Payment failed
+}
+
+model CryptoPayment {
+  id              String              @id @default(cuid())
+  orderId         String              @unique
+  order           Order               @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  // Cryptomus data
+  cryptomusUuid   String              @unique  // Cryptomus invoice UUID
+  amount          Float                        // Amount in USD
+  cryptoCurrency  String?                      // e.g., USDT, USDC
+  network         String?                      // e.g., tron, ethereum, bsc
+  walletAddress   String?                      // Wallet address for payment
+  txHash          String?                      // Transaction hash once paid
+
+  // Status
+  status          CryptoPaymentStatus @default(PENDING)
+
+  // Payment details
+  paidAmount      Float?                       // Actual amount paid
+  paymentUrl      String                       // Cryptomus payment page URL
+  expiresAt       DateTime                     // Invoice expiration
+  paidAt          DateTime?                    // When payment was confirmed
+
+  // Timestamps
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@index([status])
+  @@index([cryptomusUuid])
+  @@index([orderId])
 }

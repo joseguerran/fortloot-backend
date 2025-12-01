@@ -143,6 +143,11 @@ export class OrderController {
         where: { orderId: existingOrder.id },
       });
 
+      // Delete any existing CryptoPayment for this order (may be expired)
+      await prisma.cryptoPayment.deleteMany({
+        where: { orderId: existingOrder.id },
+      });
+
       const updatedOrder = await prisma.order.update({
         where: { id: existingOrder.id },
         data: {
@@ -154,6 +159,9 @@ export class OrderController {
           // Reset expiration time
           expiresAt: newExpiresAt,
           updatedAt: new Date(),
+          // Reset payment method (it will be set when user selects payment)
+          paymentMethod: null,
+          currentStep: null,
           // Create new OrderItems
           orderItems: {
             create: items.map((item: any) => ({
