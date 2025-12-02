@@ -85,6 +85,23 @@ router.get(
   asyncHandler(BotController.getBotActivities)
 );
 
+// Get V-Bucks balance in real-time from Epic Games - VIEWER can access, rate limited
+router.get(
+  '/:botId/vbucks',
+  requireRole('VIEWER'),
+  botOperationRateLimiter,
+  asyncHandler(BotController.getVBucksBalance)
+);
+
+// Add friend to bot - OPERATOR can access, rate limited, audited
+router.post(
+  '/:botId/add-friend',
+  requireOperator,
+  botOperationRateLimiter,
+  auditLog('BOT_ADD_FRIEND', 'Bot'),
+  asyncHandler(BotController.addFriend)
+);
+
 // Sync bot friends from Epic API - OPERATOR can access, rate limited, audited
 router.post(
   '/:botId/sync-friends',

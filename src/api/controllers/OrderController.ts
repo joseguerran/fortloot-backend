@@ -805,4 +805,97 @@ export class OrderController {
       message: 'Bot marked as fixed. Order queued for retry.',
     });
   }
+
+  /**
+   * Continue/Re-push a stuck order (Manual Intervention)
+   * Admin endpoint to re-queue orders that got stuck in intermediate states
+   * Works for: PAYMENT_VERIFIED, WAITING_FRIENDSHIP, WAITING_PERIOD, QUEUED, FAILED
+   */
+  static async continueOrder(req: Request, res: Response) {
+    const { orderId } = req.params;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: {
+        customer: true,
+      },
+    });
+
+    if (!order) {
+      throw new OrderNotFoundError(orderId);
+    }
+
+    // Define states that can be continued
+    const continuableStates: OrderStatus[] = [
+      OrderStatus.PAYMENT_VERIFIED,
+      OrderStatus.WAITING_FRIENDSHIP,
+      OrderStatus.WAITING_PERIOD,
+      OrderStatus.QUEUED,
+      OrderStatus.FAILED,
+      OrderStatus.WAITING_VBUCKS,
+      OrderStatus.WAITING_BOT_FIX,
+    ];
+
+    if (!continuableStates.includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_ORDER_STATUS',
+        message: `Cannot continue order with status ${order.status}. Only orders in PAYMENT_VERIFIED, WAITING_FRIENDSHIP, WAITING_PERIOD, QUEUED, FAILED, WAITING_VBUCKS, or WAITING_BOT_FIX can be continued.`,
+      });
+    }
+
+    // Completed orders cannot be continued
+    if (order.status === OrderStatus.COMPLETED) {
+      return res.status(400).json({
+        success: false,
+        error: 'ORDER_ALREADY_COMPLETED',
+        message: 'Cannot continue completed order',
+      });
+    }
+
+    // For FAILED, WAITING_VBUCKS, WAITING_BOT_FIX states: reset to QUEUED
+    // For other states: keep current status and just re-queue
+    const shouldResetToQueued = [
+      OrderStatus.FAILED,
+      OrderStatus.WAITING_VBUCKS,
+      OrderStatus.WAITING_BOT_FIX,
+    ].includes(order.status);
+
+    const updateData: any = {};
+
+    if (shouldResetToQueued) {
+      updateData.status = OrderStatus.QUEUED;
+      updateData.assignedBotId = null;
+      updateData.failureReason = null;
+      updateData.failedAt = null;
+    }
+
+    // Only update if there's something to change
+    let updatedOrder = order;
+    if (Object.keys(updateData).length > 0) {
+      updatedOrder = await prisma.order.update({
+        where: { id: orderId },
+        data: updateData,
+      });
+    }
+
+    // Track progress
+    const { OrderProgressTracker } = await import('../../services/OrderProgressTracker');
+    await OrderProgressTracker.update(
+      orderId,
+      'MANUAL_CONTINUE',
+      `Orden reempujada manualmente desde estado ${order.status}`
+    );
+
+    log.info(`🔄 Order ${orderId} manually continued from status ${order.status}`);
+
+    // Re-queue the order for processing
+    await queueManager.addOrderToQueue(orderId);
+
+    res.json({
+      success: true,
+      data: updatedOrder,
+      message: `Order continued successfully from ${order.status} status`,
+    });
+  }
 }

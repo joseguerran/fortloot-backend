@@ -83,14 +83,30 @@ export class BotController {
 
     const poolStats = botManager.getPoolStats();
 
-    // Calculate real-time gift data from Gift table
+    // Calculate real-time gift data and verify bot status from botManager
     const botsWithGiftData = await Promise.all(
       bots.map(async (bot) => {
         const giftsToday = await calculateGiftsToday(bot.id);
         const giftsAvailable = await calculateGiftsAvailable(bot.id, bot.maxGiftsPerDay);
 
+        // Check real-time status from botManager
+        let realTimeStatus = bot.status;
+        const botClient = botManager.getBot(bot.id);
+
+        if (botClient) {
+          const isOnline = botClient.isReady();
+          if (isOnline && bot.status !== 'ONLINE') {
+            realTimeStatus = 'ONLINE';
+          } else if (!isOnline && bot.status === 'ONLINE') {
+            realTimeStatus = 'OFFLINE';
+          }
+        } else if (bot.status === 'ONLINE') {
+          realTimeStatus = 'OFFLINE';
+        }
+
         return {
           ...bot,
+          status: realTimeStatus,
           giftsToday,
           giftsAvailable,
         };
@@ -142,12 +158,47 @@ export class BotController {
       });
     }
 
+    // Check real-time bot status from botManager
+    let realTimeStatus = bot.status;
+    const botClient = botManager.getBot(botId);
+
+    if (botClient) {
+      // Bot exists in memory - check if it's actually ready
+      const isOnline = botClient.isReady();
+      if (isOnline && bot.status !== 'ONLINE') {
+        realTimeStatus = 'ONLINE';
+        // Update DB if status is wrong
+        await prisma.bot.update({
+          where: { id: botId },
+          data: { status: 'ONLINE' },
+        });
+      } else if (!isOnline && bot.status === 'ONLINE') {
+        realTimeStatus = 'OFFLINE';
+        // Update DB if status is wrong
+        await prisma.bot.update({
+          where: { id: botId },
+          data: { status: 'OFFLINE' },
+        });
+      }
+    } else {
+      // Bot doesn't exist in memory - it's offline
+      if (bot.status === 'ONLINE') {
+        realTimeStatus = 'OFFLINE';
+        // Update DB if status is wrong
+        await prisma.bot.update({
+          where: { id: botId },
+          data: { status: 'OFFLINE' },
+        });
+      }
+    }
+
     // Calculate real-time gift data from Gift table
     const giftsToday = await calculateGiftsToday(bot.id);
     const giftsAvailable = await calculateGiftsAvailable(bot.id, bot.maxGiftsPerDay);
 
     const botWithGiftData = {
       ...bot,
+      status: realTimeStatus,
       giftsToday,
       giftsAvailable,
     };
@@ -628,10 +679,62 @@ export class BotController {
         where: { botId },
       });
 
-      const existingIds = new Set(existingFriendships.map(f => f.epicAccountId));
+      // Create maps for easier lookup
+      const existingByEpicId = new Map(existingFriendships.map(f => [f.epicAccountId, f]));
+      const existingByDisplayName = new Map(existingFriendships.map(f => [f.displayName?.toLowerCase(), f]));
+      const liveEpicIds = new Set(liveFriends.map(f => f.accountId));
+      const liveDisplayNames = new Map(liveFriends.map(f => [f.displayName?.toLowerCase(), f]));
 
-      // Find friends that are not in database
-      const newFriends = liveFriends.filter(f => !existingIds.has(f.accountId));
+      // Find friends that are not in database (new friends)
+      // Check both by epicAccountId AND by displayName to avoid duplicates
+      const newFriends = liveFriends.filter(f => {
+        const hasMatchByEpicId = existingByEpicId.has(f.accountId);
+        const hasMatchByDisplayName = existingByDisplayName.has(f.displayName?.toLowerCase());
+        return !hasMatchByEpicId && !hasMatchByDisplayName;
+      });
+
+      // Find pending friendships that are now accepted in Epic
+      // Match by epicAccountId OR by displayName (to handle cases where displayName was stored as epicAccountId)
+      const pendingToAccept: Array<{ friendship: typeof existingFriendships[0]; epicFriend: typeof liveFriends[0] | null }> = [];
+      for (const friendship of existingFriendships) {
+        if (friendship.status !== 'PENDING') continue;
+
+        // Try to find the corresponding Epic friend
+        let epicFriend: typeof liveFriends[0] | null = null;
+
+        // First, try to match by epicAccountId
+        const matchByEpicId = liveFriends.find(f => f.accountId === friendship.epicAccountId);
+        if (matchByEpicId) {
+          epicFriend = matchByEpicId;
+        } else {
+          // If not found by epicAccountId, try to match by displayName
+          // This handles cases where displayName was incorrectly stored as epicAccountId
+          const matchByDisplayName = liveDisplayNames.get(friendship.epicAccountId?.toLowerCase()) ||
+                                      liveDisplayNames.get(friendship.displayName?.toLowerCase());
+          if (matchByDisplayName) {
+            epicFriend = matchByDisplayName;
+          }
+        }
+
+        if (epicFriend) {
+          pendingToAccept.push({ friendship, epicFriend });
+        }
+      }
+
+      // Find friendships in DB that are no longer in Epic (removed)
+      // Be careful not to mark as removed if we just haven't matched correctly
+      const removedFriends = existingFriendships.filter(f => {
+        if (f.status === 'REMOVED') return false;
+
+        // Check if friend exists in Epic by epicAccountId
+        if (liveEpicIds.has(f.epicAccountId)) return false;
+
+        // Also check by displayName to avoid false positives
+        const matchByDisplayName = liveDisplayNames.get(f.displayName?.toLowerCase());
+        if (matchByDisplayName) return false;
+
+        return true;
+      });
 
       // Add new friends to database
       let addedCount = 0;
@@ -666,14 +769,92 @@ export class BotController {
         }
       }
 
+      // Update pending friendships to accepted (user accepted friend request)
+      let acceptedCount = 0;
+      for (const { friendship, epicFriend } of pendingToAccept) {
+        try {
+          const now = new Date();
+          // Use existing friendedAt if available, otherwise use now
+          const friendedAt = friendship.friendedAt || now;
+          const canGiftAt = new Date(friendedAt.getTime() + 48 * 60 * 60 * 1000);
+
+          // Build update data - always update status, and fix epicAccountId if needed
+          const updateData: any = {
+            status: 'ACCEPTED',
+            friendedAt,
+            canGiftAt,
+          };
+
+          // If the epicAccountId was stored incorrectly (e.g., displayName instead of real ID),
+          // update it to the correct value from Epic
+          if (epicFriend && epicFriend.accountId !== friendship.epicAccountId) {
+            updateData.epicAccountId = epicFriend.accountId;
+            updateData.displayName = epicFriend.displayName; // Also update displayName in case it changed
+            log.info('Correcting epicAccountId for friendship', {
+              botId,
+              oldEpicAccountId: friendship.epicAccountId,
+              newEpicAccountId: epicFriend.accountId,
+              displayName: epicFriend.displayName,
+            });
+          }
+
+          await prisma.friendship.update({
+            where: { id: friendship.id },
+            data: updateData,
+          });
+
+          acceptedCount++;
+          log.info('Friendship updated to ACCEPTED', {
+            botId,
+            epicAccountId: epicFriend?.accountId || friendship.epicAccountId,
+            displayName: epicFriend?.displayName || friendship.displayName,
+          });
+        } catch (error) {
+          log.error('Failed to update friendship status', {
+            botId,
+            friendshipId: friendship.id,
+            error,
+          });
+        }
+      }
+
+      // Mark removed friends (optional - only if they were previously accepted)
+      let removedCount = 0;
+      for (const friendship of removedFriends) {
+        // Only mark as removed if it was previously accepted (ignore pending that weren't accepted)
+        if (friendship.status === 'ACCEPTED') {
+          try {
+            await prisma.friendship.update({
+              where: { id: friendship.id },
+              data: { status: 'REMOVED' },
+            });
+
+            removedCount++;
+            log.info('Friendship marked as REMOVED', {
+              botId,
+              epicAccountId: friendship.epicAccountId,
+              displayName: friendship.displayName,
+            });
+          } catch (error) {
+            log.error('Failed to mark friendship as removed', {
+              botId,
+              friendshipId: friendship.id,
+              error,
+            });
+          }
+        }
+      }
+
       res.json({
         success: true,
         data: {
           totalInEpic: liveFriends.length,
           alreadyInDatabase: existingFriendships.length,
           newFriendsAdded: addedCount,
+          pendingAccepted: acceptedCount,
+          markedAsRemoved: removedCount,
         },
-        message: `Synced ${addedCount} new friend(s) from Epic Games`,
+        message: `Synced: ${addedCount} new, ${acceptedCount} accepted, ${removedCount} removed`,
       });
     } catch (error) {
       log.error('Failed to sync bot friends', { botId, error });
@@ -776,6 +957,110 @@ export class BotController {
         success: false,
         error: 'INTERNAL_ERROR',
         message: error instanceof Error ? error.message : 'Failed to get bot friends',
+      });
+    }
+  }
+
+  /**
+   * Get V-Bucks balance in real-time from Epic Games
+   */
+  static async getVBucksBalance(req: Request, res: Response) {
+    const { botId } = req.params;
+
+    try {
+      const botClient = botManager.getBot(botId);
+
+      if (!botClient) {
+        return res.status(404).json({
+          success: false,
+          error: 'BOT_NOT_FOUND',
+          message: 'Bot not found or offline',
+        });
+      }
+
+      if (!botClient.isReady()) {
+        return res.status(400).json({
+          success: false,
+          error: 'BOT_OFFLINE',
+          message: 'Bot is not online. Cannot query V-Bucks.',
+        });
+      }
+
+      const vbucks = await botClient.getVBucks();
+
+      // Update database with new balance
+      await prisma.bot.update({
+        where: { id: botId },
+        data: { vBucks: vbucks },
+      });
+
+      log.info('V-Bucks balance refreshed', { botId, vbucks });
+
+      res.json({
+        success: true,
+        data: { botId, vbucks },
+      });
+    } catch (error: any) {
+      log.error('Failed to get V-Bucks balance:', error);
+
+      res.status(500).json({
+        success: false,
+        error: 'VBUCKS_FETCH_FAILED',
+        message: error.message || 'Failed to fetch V-Bucks balance',
+      });
+    }
+  }
+
+  /**
+   * Add a friend to the bot's friend list
+   */
+  static async addFriend(req: Request, res: Response) {
+    const { botId } = req.params;
+    const { epicId } = req.body;
+
+    if (!epicId) {
+      return res.status(400).json({
+        success: false,
+        error: 'MISSING_EPIC_ID',
+        message: 'epicId is required',
+      });
+    }
+
+    try {
+      const botClient = botManager.getBot(botId);
+
+      if (!botClient) {
+        return res.status(404).json({
+          success: false,
+          error: 'BOT_NOT_FOUND',
+          message: 'Bot not found or offline',
+        });
+      }
+
+      if (!botClient.isReady()) {
+        return res.status(400).json({
+          success: false,
+          error: 'BOT_OFFLINE',
+          message: 'Bot is not online. Cannot add friend.',
+        });
+      }
+
+      const result = await botClient.addFriend(epicId);
+
+      log.info('Friend request sent', { botId, epicId, result });
+
+      res.json({
+        success: true,
+        data: { botId, epicId, ...result },
+        message: 'Friend request sent successfully',
+      });
+    } catch (error: any) {
+      log.error('Failed to add friend:', error);
+
+      res.status(500).json({
+        success: false,
+        error: 'ADD_FRIEND_FAILED',
+        message: error.message || 'Failed to send friend request',
       });
     }
   }

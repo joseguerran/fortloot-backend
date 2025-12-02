@@ -43,4 +43,7 @@ router.post('/:orderId/vbucks-loaded', validate(cancelOrderSchema), asyncHandler
 // Manual intervention: Mark bot as fixed
 router.post('/:orderId/bot-fixed', validate(cancelOrderSchema), asyncHandler(OrderController.markBotFixed));
 
+// Manual intervention: Continue/re-push stuck order
+router.post('/:orderId/continue', validate(cancelOrderSchema), asyncHandler(OrderController.continueOrder));
+
 export { router as orderRoutes };

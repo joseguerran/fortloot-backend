@@ -402,44 +402,34 @@ export class FortniteBotClient extends EventEmitter {
 
       await randomDelay(1000, 3000);
 
-      // Access the user/friend manager from fnbr.js client
-      // @ts-ignore - fnbr.js internal API
-      const http = this.client?.http;
+      // Use fnbr.js native FriendManager to add friend
+      // @ts-ignore - fnbr.js client.friend is the FriendManager
+      const friendManager = this.client?.friend;
 
-      if (!http) {
-        throw new Error('HTTP client not available');
+      if (!friendManager || typeof friendManager.add !== 'function') {
+        throw new Error('Friend manager not available');
       }
 
-      const accountId = this.client?.user?.self?.id;
-
-      if (!accountId) {
-        throw new Error('Bot account ID not available');
-      }
-
-      // Send friend request using Epic Games API
-      // Endpoint: POST /friends/api/v1/{accountId}/friends/{friendId}
       try {
-        await (http as any).epicgamesRequest(
-          true,
-          'POST',
-          `https://friends-public-service-prod.ol.epicgames.com/friends/api/v1/${accountId}/friends/${epicId}`,
-          `bearer ${(http as any).accessToken}`,
-          {}
-        );
-
+        // fnbr's FriendManager.add() accepts account ID or display name
+        await friendManager.add(epicId);
         log.bot.info(this.botId, 'Friend request sent', { epicId });
-      } catch (httpError: any) {
-        // Check if already friends
-        if (httpError?.response?.status === 409) {
+      } catch (fnbrError: any) {
+        // Handle specific fnbr errors
+        const errorName = fnbrError?.constructor?.name || fnbrError?.name;
+
+        if (errorName === 'DuplicateFriendshipError') {
           log.bot.info(this.botId, 'Already friends with user', { epicId });
           return;
         }
 
-        const errorMessage =
-          httpError?.response?.data?.errorMessage ||
-          httpError?.message ||
-          'Failed to send friend request';
+        if (errorName === 'FriendshipRequestAlreadySentError') {
+          log.bot.info(this.botId, 'Friend request already sent', { epicId });
+          return;
+        }
 
+        // Re-throw with a cleaner message
+        const errorMessage = fnbrError?.message || 'Failed to send friend request';
         throw new Error(errorMessage);
       }
     } catch (error) {
@@ -450,7 +440,7 @@ export class FortniteBotClient extends EventEmitter {
 
   /**
    * Get list of friends
-   * Retrieves all accepted friends from Epic Games API
+   * Retrieves all accepted friends from fnbr.js FriendManager
    */
   async getFriends(): Promise<Array<{ accountId: string; displayName: string }>> {
     if (!this.isConnected || !this.client) {
@@ -458,83 +448,41 @@ export class FortniteBotClient extends EventEmitter {
     }
 
     try {
-      // Access friends through fnbr.js client
-      // The client should have a user.friends property
-      // @ts-ignore - fnbr.js API
-      const friendsMap = this.client?.user?.friends;
+      // Use fnbr.js native FriendManager.list (Collection of Friend objects)
+      // @ts-ignore - fnbr.js client.friend is the FriendManager
+      const friendManager = this.client?.friend;
 
-      if (friendsMap && typeof friendsMap === 'object') {
-        // fnbr.js typically stores friends as a Map or object
-        const friends: Array<{ accountId: string; displayName: string }> = [];
-
-        // Check if it's a Map
-        if (friendsMap instanceof Map) {
-          for (const [id, friend] of friendsMap.entries()) {
-            // @ts-ignore
-            if (friend?.status === 'ACCEPTED') {
-              friends.push({
-                accountId: id,
-                // @ts-ignore
-                displayName: friend?.displayName || id,
-              });
-            }
-          }
-        } else {
-          // If it's an object
-          for (const [id, friend] of Object.entries(friendsMap)) {
-            // @ts-ignore
-            if (friend?.status === 'ACCEPTED') {
-              friends.push({
-                accountId: id,
-                // @ts-ignore
-                displayName: friend?.displayName || id,
-              });
-            }
-          }
-        }
-
-        return friends;
-      }
-
-      // Fallback: Use HTTP API to get friends
-      // @ts-ignore - fnbr.js internal API
-      const http = this.client?.http;
-      const accountId = this.client?.user?.self?.id;
-
-      if (!http || !accountId) {
-        log.bot.warn(this.botId, 'Cannot access friends - no HTTP client or account ID');
+      if (!friendManager) {
+        log.bot.warn(this.botId, 'Friend manager not available');
         return [];
       }
 
-      try {
-        // GET /friends/api/public/friends/{accountId}
-        const response = await (http as any).epicgamesRequest(
-          true,
-          'GET',
-          `https://friends-public-service-prod.ol.epicgames.com/friends/api/public/friends/${accountId}`,
-          `bearer ${(http as any).accessToken}`
-        );
+      const friends: Array<{ accountId: string; displayName: string }> = [];
 
-        const friends: Array<{ accountId: string; displayName: string }> = [];
+      // FriendManager.list is a Collection<string, Friend>
+      // @ts-ignore
+      const friendsList = friendManager.list;
 
-        if (Array.isArray(response)) {
-          for (const friend of response) {
-            if (friend.status === 'ACCEPTED') {
-              friends.push({
-                accountId: friend.accountId,
-                displayName: friend.displayName || friend.accountId,
-              });
-            }
-          }
-        }
-
-        return friends;
-      } catch (httpError: any) {
-        log.bot.warn(this.botId, 'Could not fetch friends from Epic API', {
-          error: httpError?.message || 'Unknown error'
+      if (friendsList && typeof friendsList.forEach === 'function') {
+        // It's a Collection (extends Map)
+        friendsList.forEach((friend: any, id: string) => {
+          friends.push({
+            accountId: friend?.id || id,
+            displayName: friend?.displayName || friend?.id || id,
+          });
         });
-        return [];
+      } else if (friendsList && typeof friendsList === 'object') {
+        // Fallback: iterate as object
+        for (const [id, friend] of Object.entries(friendsList)) {
+          friends.push({
+            accountId: (friend as any)?.id || id,
+            displayName: (friend as any)?.displayName || (friend as any)?.id || id,
+          });
+        }
       }
+
+      log.bot.info(this.botId, 'Retrieved friends from FriendManager', { count: friends.length });
+      return friends;
     } catch (error) {
       log.bot.error(this.botId, 'Failed to get friends list', error);
       return [];
