@@ -136,6 +136,7 @@ export class OrderProgressTracker {
       WAITING_PERIOD: 'Esperando período de amistad',
       GIFT_SENT: 'Regalo enviado',
       RETRY: 'Reintentando',
+      MANUAL_CONTINUE: 'Orden reempujada manualmente',
     };
 
     return descriptions[step] || step;
@@ -255,7 +256,8 @@ export type ProgressStep =
   | 'FRIENDSHIP_REQUESTED'
   | 'WAITING_PERIOD'
   | 'GIFT_SENT'
-  | 'RETRY';
+  | 'RETRY'
+  | 'MANUAL_CONTINUE';
 
 interface ProgressStepRecord {
   step: ProgressStep;

@@ -1045,13 +1045,13 @@ export class BotController {
         });
       }
 
-      const result = await botClient.addFriend(epicId);
+      await botClient.addFriend(epicId);
 
-      log.info('Friend request sent', { botId, epicId, result });
+      log.info('Friend request sent', { botId, epicId });
 
       res.json({
         success: true,
-        data: { botId, epicId, ...result },
+        data: { botId, epicId },
         message: 'Friend request sent successfully',
       });
     } catch (error: any) {

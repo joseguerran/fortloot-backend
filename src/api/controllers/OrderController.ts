@@ -855,11 +855,12 @@ export class OrderController {
 
     // For FAILED, WAITING_VBUCKS, WAITING_BOT_FIX states: reset to QUEUED
     // For other states: keep current status and just re-queue
-    const shouldResetToQueued = [
+    const resetableStates: OrderStatus[] = [
       OrderStatus.FAILED,
       OrderStatus.WAITING_VBUCKS,
       OrderStatus.WAITING_BOT_FIX,
-    ].includes(order.status);
+    ];
+    const shouldResetToQueued = resetableStates.includes(order.status);
 
     const updateData: any = {};
 
@@ -871,11 +872,12 @@ export class OrderController {
     }
 
     // Only update if there's something to change
-    let updatedOrder = order;
+    let updatedOrder: typeof order = order;
     if (Object.keys(updateData).length > 0) {
       updatedOrder = await prisma.order.update({
         where: { id: orderId },
         data: updateData,
+        include: { customer: true },
       });
     }
 
