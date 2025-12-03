@@ -23,11 +23,18 @@ router.get(
   }
 );
 
-// Login with username and password
+// Login with username and password (Step 1: sends OTP)
 router.post(
   '/login',
   authRateLimiter, // Strict rate limiting for auth
   asyncHandler(AuthController.login)
+);
+
+// Verify OTP and get API key (Step 2)
+router.post(
+  '/verify-otp',
+  authRateLimiter, // Strict rate limiting for auth
+  asyncHandler(AuthController.verifyOTP)
 );
 
 /**

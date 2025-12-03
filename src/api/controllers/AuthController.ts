@@ -4,14 +4,24 @@ import { log } from '../../utils/logger';
 import { verifyPassword } from '../../utils/password';
 import { AuthenticatedRequest } from '../middleware/rbac';
 import { audit } from '../middleware/auditLog';
+import { WhatsAppService } from '../../services/WhatsAppService';
+
+const OTP_EXPIRATION_MINUTES = 3;
 
 /**
  * AuthController - Handle authentication operations
  */
 export class AuthController {
   /**
+   * Genera un código OTP de 6 dígitos
+   */
+  private static generateOTP(): string {
+    return Math.floor(100000 + Math.random() * 900000).toString();
+  }
+
+  /**
    * Login with username and password
-   * Returns user info and API key
+   * Step 1: Validates credentials and sends OTP via WhatsApp
    */
   static async login(req: AuthenticatedRequest, res: Response) {
     const { username, password } = req.body;
@@ -35,7 +45,7 @@ export class AuthController {
         return res.status(401).json({
           success: false,
           error: 'INVALID_CREDENTIALS',
-          message: 'Invalid username or password',
+          message: 'Credenciales inválidas',
         });
       }
 
@@ -45,7 +55,17 @@ export class AuthController {
         return res.status(401).json({
           success: false,
           error: 'ACCOUNT_INACTIVE',
-          message: 'User account is inactive',
+          message: 'La cuenta está inactiva',
+        });
+      }
+
+      // Check if user has a password set
+      if (!user.passwordHash) {
+        log.warn('Login attempt for user without password', { username });
+        return res.status(401).json({
+          success: false,
+          error: 'ACCOUNT_NOT_ACTIVATED',
+          message: 'La cuenta no ha sido activada. Usa el enlace de invitación.',
         });
       }
 
@@ -57,14 +77,140 @@ export class AuthController {
         return res.status(401).json({
           success: false,
           error: 'INVALID_CREDENTIALS',
-          message: 'Invalid username or password',
+          message: 'Credenciales inválidas',
         });
       }
 
-      // Update login info
+      // Check if user has phone number for OTP
+      if (!user.phoneNumber) {
+        log.warn('Login attempt for user without phone number', { username });
+        return res.status(400).json({
+          success: false,
+          error: 'NO_PHONE_NUMBER',
+          message: 'No tienes un número de teléfono configurado para OTP. Contacta al administrador.',
+        });
+      }
+
+      // Generate OTP and save to user
+      const otpCode = AuthController.generateOTP();
+      const otpExpiresAt = new Date(Date.now() + OTP_EXPIRATION_MINUTES * 60 * 1000);
+
       await prisma.user.update({
         where: { id: user.id },
         data: {
+          otpCode,
+          otpExpiresAt,
+        },
+      });
+
+      // Send OTP via WhatsApp
+      const sent = await WhatsAppService.sendOTP(user.phoneNumber, otpCode);
+
+      if (!sent) {
+        log.error(`Failed to send OTP to user ${user.id}`);
+        return res.status(500).json({
+          success: false,
+          error: 'OTP_SEND_FAILED',
+          message: 'Error al enviar el código OTP. Intenta de nuevo.',
+        });
+      }
+
+      log.info('OTP sent for login', {
+        userId: user.id,
+        username: user.username,
+      });
+
+      // Return success with masked phone
+      const maskedPhone = user.phoneNumber.slice(-4);
+      res.json({
+        success: true,
+        data: {
+          message: 'Código OTP enviado',
+          phoneLastDigits: maskedPhone,
+          expiresIn: OTP_EXPIRATION_MINUTES * 60, // seconds
+        },
+      });
+    } catch (error) {
+      log.error('Login error', error);
+      res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Error al iniciar sesión',
+      });
+    }
+  }
+
+  /**
+   * Verify OTP and return API key
+   * Step 2: Validates OTP code and returns user info + apiKey
+   */
+  static async verifyOTP(req: AuthenticatedRequest, res: Response) {
+    const { username, otp } = req.body;
+
+    if (!username || !otp) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_REQUEST',
+        message: 'Username and OTP are required',
+      });
+    }
+
+    try {
+      // Find user by username
+      const user = await prisma.user.findUnique({
+        where: { username },
+      });
+
+      if (!user) {
+        return res.status(401).json({
+          success: false,
+          error: 'INVALID_VERIFICATION',
+          message: 'Verificación inválida',
+        });
+      }
+
+      // Check if OTP exists and is valid
+      if (!user.otpCode || !user.otpExpiresAt) {
+        return res.status(401).json({
+          success: false,
+          error: 'NO_OTP_PENDING',
+          message: 'No hay código OTP pendiente. Inicia sesión nuevamente.',
+        });
+      }
+
+      // Check if OTP is expired
+      if (new Date() > user.otpExpiresAt) {
+        // Clear expired OTP
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            otpCode: null,
+            otpExpiresAt: null,
+          },
+        });
+
+        return res.status(401).json({
+          success: false,
+          error: 'OTP_EXPIRED',
+          message: 'El código OTP ha expirado. Inicia sesión nuevamente.',
+        });
+      }
+
+      // Verify OTP
+      if (user.otpCode !== otp) {
+        return res.status(401).json({
+          success: false,
+          error: 'INVALID_OTP',
+          message: 'Código OTP inválido',
+        });
+      }
+
+      // Clear OTP and update login info
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          otpCode: null,
+          otpExpiresAt: null,
           lastLogin: new Date(),
           lastLoginIp: req.ip || null,
           loginCount: { increment: 1 },
@@ -74,7 +220,7 @@ export class AuthController {
       // Audit log
       await audit.userLogin(user.id, user.username, req.ip || 'unknown');
 
-      log.info('User logged in successfully', {
+      log.info('User logged in successfully via OTP', {
         userId: user.id,
         username: user.username,
         role: user.role,
@@ -89,18 +235,18 @@ export class AuthController {
             username: user.username,
             email: user.email,
             role: user.role,
-            lastLogin: user.lastLogin,
+            lastLogin: new Date(),
           },
           apiKey: user.apiKey,
-          message: 'Login successful',
+          message: 'Login exitoso',
         },
       });
     } catch (error) {
-      log.error('Login error', error);
+      log.error('OTP verification error', error);
       res.status(500).json({
         success: false,
         error: 'INTERNAL_ERROR',
-        message: 'Login failed',
+        message: 'Error al verificar OTP',
       });
     }
   }

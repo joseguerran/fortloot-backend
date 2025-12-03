@@ -1,9 +1,13 @@
-import { Response } from 'express';
+import { Response, Request } from 'express';
+import crypto from 'crypto';
 import { prisma } from '../../database/client';
 import { log } from '../../utils/logger';
 import { hashPassword, generateApiKey, validatePasswordStrength } from '../../utils/password';
 import { AuthenticatedRequest } from '../middleware/rbac';
 import { UserRole } from '@prisma/client';
+import { WhatsAppService } from '../../services/WhatsAppService';
+
+const INVITATION_EXPIRATION_HOURS = 24;
 
 /**
  * UserController - Manage users (ADMIN/SUPER_ADMIN only)
@@ -446,6 +450,401 @@ export class UserController {
         success: false,
         error: 'INTERNAL_ERROR',
         message: 'Failed to reset password',
+      });
+    }
+  }
+
+  /**
+   * Invite a new user (ADMIN only)
+   * Creates an inactive user with an invitation token
+   */
+  static async invite(req: AuthenticatedRequest, res: Response) {
+    const { username, phoneNumber, role, email } = req.body;
+
+    // Validation
+    if (!username || !phoneNumber || !role) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_REQUEST',
+        message: 'Username, phone number, and role are required',
+      });
+    }
+
+    // Validate role
+    const validRoles: UserRole[] = ['SUPER_ADMIN', 'ADMIN', 'OPERATOR', 'VIEWER'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_ROLE',
+        message: `Role must be one of: ${validRoles.join(', ')}`,
+      });
+    }
+
+    try {
+      // Check if username already exists
+      const existingUsername = await prisma.user.findUnique({
+        where: { username },
+      });
+
+      if (existingUsername) {
+        return res.status(400).json({
+          success: false,
+          error: 'USERNAME_EXISTS',
+          message: 'El nombre de usuario ya existe',
+        });
+      }
+
+      // Generate API key and invitation token
+      const apiKey = generateApiKey();
+      const invitationToken = crypto.randomBytes(32).toString('hex');
+      const invitationExpiresAt = new Date(Date.now() + INVITATION_EXPIRATION_HOURS * 60 * 60 * 1000);
+
+      // Create inactive user
+      const user = await prisma.user.create({
+        data: {
+          username,
+          phoneNumber,
+          email: email || null,
+          role,
+          apiKey,
+          isActive: false,
+          invitationToken,
+          invitationExpiresAt,
+          invitedBy: req.user?.id,
+        },
+        select: {
+          id: true,
+          username: true,
+          phoneNumber: true,
+          email: true,
+          role: true,
+          isActive: true,
+          createdAt: true,
+        },
+      });
+
+      // Build invitation URL
+      const backofficeUrl = 'https://admin.fortlootlatam.com';
+      const inviteUrl = `${backofficeUrl}/activate/${invitationToken}`;
+
+      // Send invitation via WhatsApp
+      const message = `🎮 *FortLoot Backoffice*\n\nHas sido invitado al panel de administración.\n\n🔗 Activa tu cuenta:\n${inviteUrl}\n\n⏰ Este enlace expira en ${INVITATION_EXPIRATION_HOURS} horas.`;
+      const sent = await WhatsAppService.sendOTP(phoneNumber, message.replace('Tu código es: *', '').replace('*\n\n⏰ Este código expira en 3 minutos.', ''));
+
+      // Actually just send a custom message
+      try {
+        const wahaUrl = process.env.WAHA_API_URL || 'http://localhost:3003';
+        const wahaApiKey = process.env.WAHA_API_KEY;
+        const chatId = phoneNumber.replace(/\D/g, '') + '@c.us';
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (wahaApiKey) {
+          headers['X-Api-Key'] = wahaApiKey;
+        }
+
+        await fetch(`${wahaUrl}/api/sendText`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            chatId,
+            text: message,
+            session: 'default'
+          })
+        });
+
+        log.info(`Invitation sent to ${phoneNumber}`);
+      } catch (whatsappError) {
+        log.warn('Failed to send invitation via WhatsApp, but user was created', whatsappError);
+      }
+
+      log.info('User invited', {
+        userId: user.id,
+        username: user.username,
+        role: user.role,
+        invitedBy: req.user?.username,
+      });
+
+      res.status(201).json({
+        success: true,
+        data: {
+          ...user,
+          invitationToken,
+          inviteUrl,
+        },
+        message: 'Usuario invitado exitosamente',
+      });
+    } catch (error) {
+      log.error('Failed to invite user', error);
+      res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Error al invitar usuario',
+      });
+    }
+  }
+
+  /**
+   * Get invitation info (public endpoint)
+   * Validates that an invitation token is valid
+   */
+  static async getInvitation(req: Request, res: Response) {
+    const { token } = req.params;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_REQUEST',
+        message: 'Token is required',
+      });
+    }
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { invitationToken: token },
+        select: {
+          id: true,
+          username: true,
+          role: true,
+          invitationExpiresAt: true,
+          isActive: true,
+        },
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'INVITATION_NOT_FOUND',
+          message: 'Invitación no encontrada o inválida',
+        });
+      }
+
+      // Check if already activated
+      if (user.isActive) {
+        return res.status(400).json({
+          success: false,
+          error: 'ALREADY_ACTIVATED',
+          message: 'Esta cuenta ya ha sido activada',
+        });
+      }
+
+      // Check if expired
+      if (!user.invitationExpiresAt || new Date() > user.invitationExpiresAt) {
+        return res.status(400).json({
+          success: false,
+          error: 'INVITATION_EXPIRED',
+          message: 'Esta invitación ha expirado',
+        });
+      }
+
+      res.json({
+        success: true,
+        data: {
+          username: user.username,
+          role: user.role,
+          expiresAt: user.invitationExpiresAt,
+        },
+      });
+    } catch (error) {
+      log.error('Failed to get invitation', error);
+      res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Error al verificar invitación',
+      });
+    }
+  }
+
+  /**
+   * Activate user account (public endpoint)
+   * Sets password and activates the user
+   */
+  static async activate(req: Request, res: Response) {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_REQUEST',
+        message: 'Token and password are required',
+      });
+    }
+
+    // Validate password strength
+    const passwordError = validatePasswordStrength(password);
+    if (passwordError) {
+      return res.status(400).json({
+        success: false,
+        error: 'WEAK_PASSWORD',
+        message: passwordError,
+      });
+    }
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { invitationToken: token },
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'INVITATION_NOT_FOUND',
+          message: 'Invitación no encontrada o inválida',
+        });
+      }
+
+      // Check if already activated
+      if (user.isActive) {
+        return res.status(400).json({
+          success: false,
+          error: 'ALREADY_ACTIVATED',
+          message: 'Esta cuenta ya ha sido activada',
+        });
+      }
+
+      // Check if expired
+      if (!user.invitationExpiresAt || new Date() > user.invitationExpiresAt) {
+        return res.status(400).json({
+          success: false,
+          error: 'INVITATION_EXPIRED',
+          message: 'Esta invitación ha expirado',
+        });
+      }
+
+      // Hash password and activate user
+      const passwordHash = await hashPassword(password);
+
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          passwordHash,
+          isActive: true,
+          invitationToken: null,
+          invitationExpiresAt: null,
+        },
+      });
+
+      log.info('User activated', {
+        userId: user.id,
+        username: user.username,
+      });
+
+      res.json({
+        success: true,
+        message: 'Cuenta activada exitosamente. Ya puedes iniciar sesión.',
+      });
+    } catch (error) {
+      log.error('Failed to activate user', error);
+      res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Error al activar cuenta',
+      });
+    }
+  }
+
+  /**
+   * Resend invitation to user (ADMIN only)
+   * Generates a new token and sends via WhatsApp
+   */
+  static async resendInvitation(req: AuthenticatedRequest, res: Response) {
+    const { userId } = req.params;
+
+    try {
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        return res.status(404).json({
+          success: false,
+          error: 'USER_NOT_FOUND',
+          message: 'Usuario no encontrado',
+        });
+      }
+
+      // Check if user is already active
+      if (user.isActive) {
+        return res.status(400).json({
+          success: false,
+          error: 'ALREADY_ACTIVATED',
+          message: 'Este usuario ya está activo',
+        });
+      }
+
+      // Check if user has a phone number
+      if (!user.phoneNumber) {
+        return res.status(400).json({
+          success: false,
+          error: 'NO_PHONE_NUMBER',
+          message: 'El usuario no tiene número de teléfono registrado',
+        });
+      }
+
+      // Generate new invitation token
+      const invitationToken = crypto.randomBytes(32).toString('hex');
+      const invitationExpiresAt = new Date(Date.now() + INVITATION_EXPIRATION_HOURS * 60 * 60 * 1000);
+
+      // Update user with new token
+      await prisma.user.update({
+        where: { id: userId },
+        data: {
+          invitationToken,
+          invitationExpiresAt,
+        },
+      });
+
+      // Build invitation URL
+      const backofficeUrl = 'https://admin.fortlootlatam.com';
+      const inviteUrl = `${backofficeUrl}/activate/${invitationToken}`;
+
+      // Send invitation via WhatsApp
+      const message = `🎮 *FortLoot Backoffice*\n\nHas sido invitado al panel de administración.\n\n🔗 Activa tu cuenta:\n${inviteUrl}\n\n⏰ Este enlace expira en ${INVITATION_EXPIRATION_HOURS} horas.`;
+
+      try {
+        const wahaUrl = process.env.WAHA_API_URL || 'http://localhost:3003';
+        const wahaApiKey = process.env.WAHA_API_KEY;
+        const chatId = user.phoneNumber.replace(/\D/g, '') + '@c.us';
+
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+        if (wahaApiKey) {
+          headers['X-Api-Key'] = wahaApiKey;
+        }
+
+        await fetch(`${wahaUrl}/api/sendText`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            chatId,
+            text: message,
+            session: 'default'
+          })
+        });
+
+        log.info(`Invitation resent to ${user.phoneNumber}`);
+      } catch (whatsappError) {
+        log.warn('Failed to resend invitation via WhatsApp', whatsappError);
+      }
+
+      log.info('Invitation resent', {
+        userId: user.id,
+        username: user.username,
+        resentBy: req.user?.username,
+      });
+
+      res.json({
+        success: true,
+        data: {
+          invitationToken,
+          inviteUrl,
+        },
+        message: 'Invitación reenviada exitosamente',
+      });
+    } catch (error) {
+      log.error('Failed to resend invitation', error);
+      res.status(500).json({
+        success: false,
+        error: 'INTERNAL_ERROR',
+        message: 'Error al reenviar invitación',
       });
     }
   }

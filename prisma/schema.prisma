@@ -271,20 +271,32 @@ model Config {
 model User {
   id           String     @id @default(uuid())
   username     String     @unique
-  email        String     @unique
-  passwordHash String
+  email        String?    @unique
+  passwordHash String?
   apiKey       String     @unique
   role         UserRole   @default(VIEWER)
   isActive     Boolean    @default(true)
+  phoneNumber  String?    // Para OTP via WhatsApp
   lastLogin    DateTime?
   lastLoginIp  String?
   loginCount   Int        @default(0)
   createdAt    DateTime   @default(now())
   updatedAt    DateTime   @updatedAt
+
+  // Campos para invitación
+  invitationToken     String?   @unique
+  invitationExpiresAt DateTime?
+  invitedBy           String?
+
+  // Campos para OTP de login
+  otpCode      String?
+  otpExpiresAt DateTime?
+
   auditLogs    AuditLog[]
 
   @@index([apiKey])
   @@index([role, isActive])
+  @@index([invitationToken])
 }
 
 model AuditLog {
@@ -608,6 +620,7 @@ enum AuditAction {
   USER_DELETE
   USER_LOGIN
   USER_LOGOUT
+  USER_INVITE
   CONFIG_UPDATE
   CONFIG_DELETE
   CHECKOUT_MODE_UPDATE
