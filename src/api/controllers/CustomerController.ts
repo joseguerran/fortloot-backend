@@ -454,14 +454,35 @@ export class CustomerController {
         orderBy: { lifetimeValue: 'desc' },
         skip: (page - 1) * limit,
         take: limit,
+        include: {
+          orders: {
+            where: { status: 'COMPLETED' },
+            select: { finalPrice: true },
+          },
+        },
       }),
       prisma.customer.count({ where }),
     ]);
 
+    // Calculate totalSpent and totalOrders from completed orders
+    const customersWithStats = customers.map((customer) => {
+      const completedOrders = customer.orders || [];
+      const totalSpent = completedOrders.reduce((sum, order) => sum + (order.finalPrice || 0), 0);
+      const totalOrders = completedOrders.length;
+
+      // Remove orders from response, keep only stats
+      const { orders, ...customerData } = customer;
+      return {
+        ...customerData,
+        totalSpent,
+        totalOrders,
+      };
+    });
+
     res.json({
       success: true,
       data: {
-        customers,
+        customers: customersWithStats,
         pagination: {
           page,
           limit,
