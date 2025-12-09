@@ -111,6 +111,14 @@ async function main() {
       isActive: true,
       displayOrder: 4,
     },
+    {
+      name: 'Pago Móvil',
+      slug: 'pagomovil',
+      description: 'Pago mediante Pago Móvil (Venezuela)',
+      instructions: 'Enviar el pago a:\\nC.I: 28410499\\nNúm: 04241331555\\nBanco: Mercantil',
+      isActive: false, // Desactivado hasta configurar la tasa
+      displayOrder: 5,
+    },
   ];
 
   for (const method of paymentMethods) {
@@ -127,7 +135,54 @@ async function main() {
   }
 
   // ============================================================================
-  // 4. CREAR CONFIGURACIÓN DE PRECIOS
+  // 4. CREAR CONFIGURACIÓN DE PAGO MÓVIL (CONVERSIÓN VES)
+  // ============================================================================
+  console.log('\n💱 Creating Pago Móvil currency conversion config...');
+
+  const pagoMovilMethod = await prisma.paymentMethod.findUnique({
+    where: { slug: 'pagomovil' },
+  });
+
+  if (pagoMovilMethod) {
+    const existingConfig = await prisma.paymentMethodConfig.findUnique({
+      where: {
+        paymentMethodId_type: {
+          paymentMethodId: pagoMovilMethod.id,
+          type: 'CURRENCY_CONVERSION',
+        },
+      },
+    });
+
+    if (existingConfig) {
+      console.log('   ✓ Pago Móvil currency conversion config already exists');
+    } else {
+      await prisma.paymentMethodConfig.create({
+        data: {
+          paymentMethodId: pagoMovilMethod.id,
+          type: 'CURRENCY_CONVERSION',
+          enabled: true,
+          config: {
+            targetCurrency: 'VES',
+            rateProvider: 'binance_p2p',
+            bankFilter: 'Mercantil',
+            markup: 10, // 10 Bs adicionales
+            cacheTTLMin: 15, // 15 minutos de cache
+          },
+        },
+      });
+      console.log('   ✓ Created Pago Móvil currency conversion config');
+      console.log('      Target currency: VES (Bolívares)');
+      console.log('      Rate provider: Binance P2P');
+      console.log('      Bank filter: Mercantil');
+      console.log('      Markup: 10 Bs');
+      console.log('      Cache TTL: 15 minutes');
+    }
+  } else {
+    console.log('   ⚠️  Pago Móvil payment method not found, skipping config');
+  }
+
+  // ============================================================================
+  // 5. CREAR CONFIGURACIÓN DE PRECIOS
   // ============================================================================
   console.log('\n💰 Creating pricing configuration...');
 
@@ -172,6 +227,7 @@ async function main() {
     users: await prisma.user.count(),
     bots: await prisma.bot.count(),
     paymentMethods: await prisma.paymentMethod.count(),
+    paymentMethodConfigs: await prisma.paymentMethodConfig.count(),
     configs: await prisma.config.count(),
     pricingConfigs: await prisma.pricingConfig.count(),
   };
@@ -180,6 +236,7 @@ async function main() {
   console.log(`   Users: ${stats.users}`);
   console.log(`   Bots: ${stats.bots}`);
   console.log(`   Payment Methods: ${stats.paymentMethods}`);
+  console.log(`   Payment Method Configs: ${stats.paymentMethodConfigs}`);
   console.log(`   Configs: ${stats.configs}`);
   console.log(`   Pricing Configs: ${stats.pricingConfigs}`);
 

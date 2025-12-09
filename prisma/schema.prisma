@@ -425,8 +425,67 @@ model PaymentMethod {
   updatedAt    DateTime @updatedAt
   accountInfo  Json?
 
+  // Relación con configuraciones específicas
+  configs      PaymentMethodConfig[]
+
   @@index([isActive, displayOrder])
   @@index([slug])
+}
+
+// Configuración extensible por método de pago
+// Soporta: CURRENCY_CONVERSION, FEE, COUNTRY_RESTRICTION, AMOUNT_LIMIT
+model PaymentMethodConfig {
+  id              String        @id @default(uuid())
+  paymentMethodId String
+  paymentMethod   PaymentMethod @relation(fields: [paymentMethodId], references: [id], onDelete: Cascade)
+
+  // Tipo de configuración
+  type            String        // "CURRENCY_CONVERSION", "FEE", "COUNTRY_RESTRICTION", etc.
+
+  // Configuración específica (JSON flexible según el tipo)
+  // Para CURRENCY_CONVERSION: { targetCurrency, rateProvider, bankFilter, markup, cacheTTLMin }
+  // Para FEE: { feeType, feeValue, description }
+  // Para COUNTRY_RESTRICTION: { countries: [], mode: "whitelist"|"blacklist" }
+  // Para AMOUNT_LIMIT: { minAmount, maxAmount }
+  config          Json
+
+  // Estado
+  enabled         Boolean       @default(true)
+
+  // Timestamps
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@unique([paymentMethodId, type]) // Un tipo por método de pago
+  @@index([paymentMethodId])
+  @@index([type])
+}
+
+// Cache de tasas de cambio (soporta múltiples monedas)
+model ExchangeRateCache {
+  id            String    @id @default(uuid())
+  currency      String    @unique // "VES", "CLP", "COP", "ARS", etc.
+
+  // Tasa actual
+  rate          Float              // Tasa calculada (después de markup)
+  rawRate       Float?             // Tasa cruda del proveedor (sin markup)
+  source        String             // "binance_p2p", "manual", "api_xyz"
+
+  // Manual override (tiene prioridad sobre el proveedor)
+  manualRate    Float?             // Si se establece, ignora el proveedor
+  manualSetBy   String?            // Username del admin que la estableció
+  manualSetAt   DateTime?          // Cuándo se estableció
+
+  // Cache metadata
+  fetchedAt     DateTime           // Cuándo se obtuvo la tasa
+  expiresAt     DateTime           // Cuándo expira el cache
+
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([currency])
+  @@index([expiresAt])
 }
 
 model Blacklist {
@@ -651,6 +710,16 @@ enum AuditAction {
   PAYMENT_METHOD_DELETE
   PAYMENT_METHOD_TOGGLE
   PAYMENT_METHOD_REORDER
+  PAYMENT_METHOD_CONFIG_CREATE
+  PAYMENT_METHOD_CONFIG_UPDATE
+  PAYMENT_METHOD_CONFIG_UPSERT
+  PAYMENT_METHOD_CONFIG_DELETE
+  PAYMENT_METHOD_CONFIG_TOGGLE
+  EXCHANGE_RATE_FETCH
+  EXCHANGE_RATE_CACHE_CLEAR
+  EXCHANGE_RATE_CACHE_INVALIDATE
+  EXCHANGE_RATE_MANUAL_SET
+  EXCHANGE_RATE_MANUAL_CLEAR
   WHATSAPP_CONFIG_UPDATE
   CRYPTO_PAYMENTS_CONFIG_UPDATE
 }

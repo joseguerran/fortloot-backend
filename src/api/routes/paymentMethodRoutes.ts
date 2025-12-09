@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { PaymentMethodController } from '../controllers/PaymentMethodController';
+import { PaymentMethodConfigController } from '../controllers/PaymentMethodConfigController';
 import { asyncHandler } from '../middleware/errorHandler';
 import { authenticate } from '../middleware/auth';
 import { requireAdmin } from '../middleware/rbac';
@@ -24,10 +25,40 @@ router.get(
   asyncHandler(PaymentMethodController.getBySlug)
 );
 
+// Get payment method by slug with configs (store needs this for checkout)
+router.get(
+  '/slug/:slug/with-configs',
+  asyncHandler(PaymentMethodConfigController.getWithConfigsBySlug)
+);
+
 // Get payment method by ID (store needs this)
 router.get(
   '/:id',
   asyncHandler(PaymentMethodController.getById)
+);
+
+// Get payment method with configs (public endpoint for checkout)
+router.get(
+  '/:id/with-configs',
+  asyncHandler(PaymentMethodConfigController.getWithConfigs)
+);
+
+// Apply price configs (public endpoint for checkout)
+router.get(
+  '/:id/price',
+  asyncHandler(PaymentMethodConfigController.applyPrice)
+);
+
+// Get configs for a payment method (public read)
+router.get(
+  '/:id/configs',
+  asyncHandler(PaymentMethodConfigController.getConfigs)
+);
+
+// Get specific config by type (public read)
+router.get(
+  '/:id/configs/:type',
+  asyncHandler(PaymentMethodConfigController.getConfigByType)
 );
 
 // Admin-only routes
@@ -66,6 +97,31 @@ router.post(
   '/reorder',
   auditLog('PAYMENT_METHOD_REORDER', 'PaymentMethod'),
   asyncHandler(PaymentMethodController.reorder)
+);
+
+// ============================================================================
+// Payment Method Config Routes (Admin only)
+// ============================================================================
+
+// Create or update config
+router.put(
+  '/:id/configs/:type',
+  auditLog('PAYMENT_METHOD_CONFIG_UPSERT', 'PaymentMethodConfig'),
+  asyncHandler(PaymentMethodConfigController.upsertConfig)
+);
+
+// Delete config
+router.delete(
+  '/:id/configs/:type',
+  auditLog('PAYMENT_METHOD_CONFIG_DELETE', 'PaymentMethodConfig'),
+  asyncHandler(PaymentMethodConfigController.deleteConfig)
+);
+
+// Toggle config enabled/disabled
+router.patch(
+  '/:id/configs/:type/toggle',
+  auditLog('PAYMENT_METHOD_CONFIG_TOGGLE', 'PaymentMethodConfig'),
+  asyncHandler(PaymentMethodConfigController.toggleConfig)
 );
 
 export { router as paymentMethodRoutes };
