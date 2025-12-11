@@ -1,0 +1,25 @@
+{
+  "common": {
+    "order": "Order",
+    "customer": "Customer",
+    "amount": "Amount"
+  },
+  "orderCreated": {
+    "title": "New Order Created",
+    "icon": "",
+    "items": "Items",
+    "waiting": "Waiting for payment proof..."
+  },
+  "paymentUploaded": {
+    "title": "Payment Proof Uploaded",
+    "icon": "",
+    "action": "Requires manual verification."
+  },
+  "otpCode": {
+    "title": "FortLoot - Verification Code",
+    "icon": "",
+    "codeLabel": "Your code is:",
+    "expiry": "This code expires in 3 minutes.",
+    "ignore": "If you didn't request this code, ignore this message."
+  }
+}

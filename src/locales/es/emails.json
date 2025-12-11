@@ -1,0 +1,57 @@
+{
+  "common": {
+    "order": "Orden",
+    "amount": "Monto",
+    "customer": "Cliente",
+    "status": "Estado",
+    "thankYou": "Gracias por tu compra en FortLoot!",
+    "support": "Si tienes dudas, contacta a soporte.",
+    "team": "El equipo de FortLoot"
+  },
+  "paymentUploaded": {
+    "subject": "Nuevo Comprobante de Pago - Orden {{orderNumber}}",
+    "title": "Nuevo Comprobante de Pago Subido",
+    "body": "Se ha subido un nuevo comprobante de pago que requiere verificación.",
+    "action": "Por favor ingresa al panel de administración para verificar el pago.",
+    "button": "Ver Pagos Pendientes"
+  },
+  "paymentVerified": {
+    "subject": "Pago Verificado - Orden {{orderNumber}}",
+    "title": "¡Pago Verificado!",
+    "body": "Tu pago ha sido verificado exitosamente.",
+    "processing": "Tu pedido está siendo procesado y será entregado pronto.",
+    "viewOrder": "Puedes ver el estado de tu orden en cualquier momento:",
+    "button": "Ver Estado de Orden"
+  },
+  "paymentRejected": {
+    "subject": "Pago Rechazado - Orden {{orderNumber}}",
+    "title": "Pago Rechazado",
+    "body": "Tu comprobante de pago ha sido rechazado.",
+    "reason": "Razón del rechazo:",
+    "action": "Por favor verifica tu comprobante y súbelo nuevamente con la información correcta.",
+    "button": "Reintentar Subir Comprobante"
+  },
+  "paymentInstructions": {
+    "subject": "Instrucciones de Pago - Orden {{orderNumber}}",
+    "title": "Orden Creada - Instrucciones de Pago",
+    "body": "Tu orden ha sido creada exitosamente. Por favor realiza el pago siguiendo las instrucciones.",
+    "methodsTitle": "Métodos de Pago Disponibles:",
+    "important": "Importante: Después de realizar el pago, sube tu comprobante en la página de tu orden. El pago será verificado manualmente.",
+    "button": "Subir Comprobante de Pago"
+  },
+  "orderCompleted": {
+    "subject": "Orden Completada - {{orderNumber}}",
+    "title": "¡Orden Completada!",
+    "body": "Tu orden ha sido completada y los items han sido enviados a tu cuenta de Fortnite.",
+    "action": "Verifica tu cuenta de Fortnite para ver tus nuevos items!",
+    "footer": "Gracias por confiar en FortLoot. ¡Esperamos verte pronto!"
+  },
+  "otpCode": {
+    "subject": "Tu código de verificación - FortLoot",
+    "title": "Código de Verificación",
+    "body": "Has solicitado acceder a tu historial de compras en FortLoot.",
+    "codeLabel": "Tu código es:",
+    "expiry": "Este código expira en 3 minutos.",
+    "ignore": "Si no solicitaste este código, puedes ignorar este mensaje de forma segura."
+  }
+}

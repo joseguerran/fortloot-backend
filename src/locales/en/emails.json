@@ -1,0 +1,57 @@
+{
+  "common": {
+    "order": "Order",
+    "amount": "Amount",
+    "customer": "Customer",
+    "status": "Status",
+    "thankYou": "Thank you for your purchase at FortLoot!",
+    "support": "If you have questions, contact support.",
+    "team": "The FortLoot Team"
+  },
+  "paymentUploaded": {
+    "subject": "New Payment Proof - Order {{orderNumber}}",
+    "title": "New Payment Proof Uploaded",
+    "body": "A new payment proof has been uploaded that requires verification.",
+    "action": "Please access the admin panel to verify the payment.",
+    "button": "View Pending Payments"
+  },
+  "paymentVerified": {
+    "subject": "Payment Verified - Order {{orderNumber}}",
+    "title": "Payment Verified!",
+    "body": "Your payment has been successfully verified.",
+    "processing": "Your order is being processed and will be delivered soon.",
+    "viewOrder": "You can check your order status at any time:",
+    "button": "View Order Status"
+  },
+  "paymentRejected": {
+    "subject": "Payment Rejected - Order {{orderNumber}}",
+    "title": "Payment Rejected",
+    "body": "Your payment proof has been rejected.",
+    "reason": "Rejection reason:",
+    "action": "Please verify your proof and upload it again with the correct information.",
+    "button": "Retry Upload Proof"
+  },
+  "paymentInstructions": {
+    "subject": "Payment Instructions - Order {{orderNumber}}",
+    "title": "Order Created - Payment Instructions",
+    "body": "Your order has been created successfully. Please make the payment following the instructions.",
+    "methodsTitle": "Available Payment Methods:",
+    "important": "Important: After making the payment, upload your proof on your order page. The payment will be verified manually.",
+    "button": "Upload Payment Proof"
+  },
+  "orderCompleted": {
+    "subject": "Order Completed - {{orderNumber}}",
+    "title": "Order Completed!",
+    "body": "Your order has been completed and the items have been sent to your Fortnite account.",
+    "action": "Check your Fortnite account to see your new items!",
+    "footer": "Thank you for trusting FortLoot. We hope to see you soon!"
+  },
+  "otpCode": {
+    "subject": "Your verification code - FortLoot",
+    "title": "Verification Code",
+    "body": "You have requested to access your purchase history on FortLoot.",
+    "codeLabel": "Your code is:",
+    "expiry": "This code expires in 3 minutes.",
+    "ignore": "If you didn't request this code, you can safely ignore this message."
+  }
+}
