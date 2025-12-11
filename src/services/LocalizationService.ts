@@ -1,7 +1,4 @@
-import { PrismaClient } from '@prisma/client';
 import { log } from '../utils/logger';
-
-const prisma = new PrismaClient();
 
 export type Locale = 'es' | 'en';
 export type TranslationNamespace = 'emails' | 'whatsapp' | 'otp' | 'orders' | 'validation' | 'errors';
@@ -106,73 +103,6 @@ export function t(
   return text;
 }
 
-/**
- * Get customer's preferred language from database
- *
- * @param customerId - Customer UUID
- * @returns Customer's preferred locale or 'es' as default
- */
-export async function getCustomerLocale(customerId: string): Promise<Locale> {
-  try {
-    const customer = await prisma.customer.findUnique({
-      where: { id: customerId },
-      select: { preferredLanguage: true }
-    });
-
-    const lang = customer?.preferredLanguage;
-    if (lang === 'en' || lang === 'es') {
-      return lang;
-    }
-
-    return 'es'; // Default
-  } catch (error) {
-    log.error(`Error getting customer locale for ${customerId}`, error);
-    return 'es';
-  }
-}
-
-/**
- * Get customer's preferred language by Epic Account ID
- */
-export async function getCustomerLocaleByEpicId(epicAccountId: string): Promise<Locale> {
-  try {
-    const customer = await prisma.customer.findFirst({
-      where: {
-        OR: [
-          { epicAccountId },
-          { displayName: epicAccountId }
-        ]
-      },
-      select: { preferredLanguage: true }
-    });
-
-    const lang = customer?.preferredLanguage;
-    if (lang === 'en' || lang === 'es') {
-      return lang;
-    }
-
-    return 'es';
-  } catch (error) {
-    log.error(`Error getting customer locale for Epic ID ${epicAccountId}`, error);
-    return 'es';
-  }
-}
-
-/**
- * Update customer's preferred language
- */
-export async function updateCustomerLocale(customerId: string, locale: Locale): Promise<boolean> {
-  try {
-    await prisma.customer.update({
-      where: { id: customerId },
-      data: { preferredLanguage: locale }
-    });
-    return true;
-  } catch (error) {
-    log.error(`Error updating customer locale for ${customerId}`, error);
-    return false;
-  }
-}
 
 /**
  * Determine locale from Accept-Language header
@@ -198,9 +128,6 @@ export function clearTranslationCache(): void {
 // Export singleton-like functions
 export const LocalizationService = {
   t,
-  getCustomerLocale,
-  getCustomerLocaleByEpicId,
-  updateCustomerLocale,
   getLocaleFromHeader,
   clearTranslationCache
 };
