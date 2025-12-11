@@ -3,6 +3,7 @@ import { log } from '../utils/logger';
 import { EmailService } from './EmailService';
 import { WhatsAppService } from './WhatsAppService';
 import { ContactType } from '@prisma/client';
+import { Locale } from './LocalizationService';
 
 const OTP_EXPIRATION_MINUTES = 3;
 const OTP_LENGTH = 6;
@@ -197,7 +198,7 @@ export class OTPService {
   /**
    * Solicita un OTP usando el nombre de usuario de Fortnite (displayName)
    */
-  static async requestOTPByEpicId(displayName: string): Promise<{
+  static async requestOTPByEpicId(displayName: string, locale: Locale = 'es'): Promise<{
     success: boolean;
     customerId?: string;
     contactMethod?: 'EMAIL' | 'WHATSAPP';
@@ -264,9 +265,9 @@ export class OTPService {
       // Enviar código por el medio correspondiente
       let sent = false;
       if (contactType === 'EMAIL' && customer.email) {
-        sent = await EmailService.sendOTPEmail(customer.email, code);
+        sent = await EmailService.sendOTPEmail(customer.email, code, locale);
       } else if (contactType === 'WHATSAPP' && customer.phoneNumber) {
-        sent = await WhatsAppService.sendOTP(customer.phoneNumber, code);
+        sent = await WhatsAppService.sendOTP(customer.phoneNumber, code, locale);
       }
 
       if (!sent) {

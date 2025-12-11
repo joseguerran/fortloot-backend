@@ -1,5 +1,6 @@
 import { Resend } from 'resend';
 import { log } from '../utils/logger';
+import { t, Locale } from './LocalizationService';
 
 interface EmailOptions {
   to: string;
@@ -69,7 +70,7 @@ export class EmailService {
   }
 
   /**
-   * Send payment uploaded notification to admin
+   * Send payment uploaded notification to admin (always in Spanish for internal use)
    */
   static async sendPaymentUploadedNotification(orderNumber: string, amount: number, epicAccountId: string): Promise<boolean> {
     const adminEmail = process.env.ADMIN_EMAIL;
@@ -78,20 +79,22 @@ export class EmailService {
       return false;
     }
 
-    const subject = `Nuevo Comprobante de Pago - Orden ${orderNumber}`;
+    // Admin emails always in Spanish
+    const locale: Locale = 'es';
+    const subject = t('paymentUploaded.subject', locale, 'emails', { orderNumber });
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #FF3E9A;">Nuevo Comprobante de Pago Subido</h2>
-        <p>Se ha subido un nuevo comprobante de pago que requiere verificacion.</p>
+        <h2 style="color: #FF3E9A;">${t('paymentUploaded.title', locale, 'emails')}</h2>
+        <p>${t('paymentUploaded.body', locale, 'emails')}</p>
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>Orden:</strong> ${orderNumber}</p>
-          <p><strong>Cliente:</strong> ${epicAccountId}</p>
-          <p><strong>Monto:</strong> $${amount.toFixed(2)} USD</p>
+          <p><strong>${t('common.order', locale, 'emails')}:</strong> ${orderNumber}</p>
+          <p><strong>${t('common.customer', locale, 'emails')}:</strong> ${epicAccountId}</p>
+          <p><strong>${t('common.amount', locale, 'emails')}:</strong> $${amount.toFixed(2)} USD</p>
         </div>
-        <p>Por favor ingresa al panel de administracion para verificar el pago.</p>
+        <p>${t('paymentUploaded.action', locale, 'emails')}</p>
         <a href="${process.env.ADMIN_PANEL_URL || 'http://localhost:3002'}/payment-verification"
            style="background-color: #FF3E9A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 20px;">
-          Ver Pagos Pendientes
+          ${t('paymentUploaded.button', locale, 'emails')}
         </a>
       </div>
     `;
@@ -102,25 +105,31 @@ export class EmailService {
   /**
    * Send payment verified notification to customer
    */
-  static async sendPaymentVerifiedNotification(email: string, orderNumber: string, amount: number): Promise<boolean> {
-    const subject = `Pago Verificado - Orden ${orderNumber}`;
+  static async sendPaymentVerifiedNotification(
+    email: string,
+    orderNumber: string,
+    amount: number,
+    locale: Locale = 'es'
+  ): Promise<boolean> {
+
+    const subject = t('paymentVerified.subject', locale, 'emails', { orderNumber });
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #10B981;">Pago Verificado!</h2>
-        <p>Tu pago ha sido verificado exitosamente.</p>
+        <h2 style="color: #10B981;">${t('paymentVerified.title', locale, 'emails')}</h2>
+        <p>${t('paymentVerified.body', locale, 'emails')}</p>
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>Orden:</strong> ${orderNumber}</p>
-          <p><strong>Monto:</strong> $${amount.toFixed(2)} USD</p>
-          <p><strong>Estado:</strong> Verificado</p>
+          <p><strong>${t('common.order', locale, 'emails')}:</strong> ${orderNumber}</p>
+          <p><strong>${t('common.amount', locale, 'emails')}:</strong> $${amount.toFixed(2)} USD</p>
+          <p><strong>${t('common.status', locale, 'emails')}:</strong> ${locale === 'en' ? 'Verified' : 'Verificado'}</p>
         </div>
-        <p>Tu pedido esta siendo procesado y sera entregado pronto.</p>
-        <p>Puedes ver el estado de tu orden en cualquier momento:</p>
-        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/order-status/${orderNumber}"
+        <p>${t('paymentVerified.processing', locale, 'emails')}</p>
+        <p>${t('paymentVerified.viewOrder', locale, 'emails')}</p>
+        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/order-status/${orderNumber}"
            style="background-color: #10B981; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 20px;">
-          Ver Estado de Orden
+          ${t('paymentVerified.button', locale, 'emails')}
         </a>
         <p style="margin-top: 30px; color: #666; font-size: 14px;">
-          Gracias por tu compra en FortLoot!
+          ${t('common.thankYou', locale, 'emails')}
         </p>
       </div>
     `;
@@ -131,26 +140,32 @@ export class EmailService {
   /**
    * Send payment rejected notification to customer
    */
-  static async sendPaymentRejectedNotification(email: string, orderNumber: string, reason: string): Promise<boolean> {
-    const subject = `Pago Rechazado - Orden ${orderNumber}`;
+  static async sendPaymentRejectedNotification(
+    email: string,
+    orderNumber: string,
+    reason: string,
+    locale: Locale = 'es'
+  ): Promise<boolean> {
+
+    const subject = t('paymentRejected.subject', locale, 'emails', { orderNumber });
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #EF4444;">Pago Rechazado</h2>
-        <p>Tu comprobante de pago ha sido rechazado.</p>
+        <h2 style="color: #EF4444;">${t('paymentRejected.title', locale, 'emails')}</h2>
+        <p>${t('paymentRejected.body', locale, 'emails')}</p>
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>Orden:</strong> ${orderNumber}</p>
-          <p><strong>Razon del rechazo:</strong></p>
+          <p><strong>${t('common.order', locale, 'emails')}:</strong> ${orderNumber}</p>
+          <p><strong>${t('paymentRejected.reason', locale, 'emails')}</strong></p>
           <p style="padding: 10px; background-color: #FEE2E2; border-left: 4px solid #EF4444; margin-top: 10px;">
             ${reason}
           </p>
         </div>
-        <p>Por favor verifica tu comprobante y subelo nuevamente con la informacion correcta.</p>
-        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/order-status/${orderNumber}"
+        <p>${t('paymentRejected.action', locale, 'emails')}</p>
+        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/order-status/${orderNumber}"
            style="background-color: #EF4444; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 20px;">
-          Reintentar Subir Comprobante
+          ${t('paymentRejected.button', locale, 'emails')}
         </a>
         <p style="margin-top: 30px; color: #666; font-size: 14px;">
-          Si tienes dudas, contacta a soporte.
+          ${t('common.support', locale, 'emails')}
         </p>
       </div>
     `;
@@ -161,25 +176,32 @@ export class EmailService {
   /**
    * Send payment instructions email
    */
-  static async sendPaymentInstructions(email: string, orderNumber: string, amount: number, expiresAt: Date): Promise<boolean> {
-    const subject = `Instrucciones de Pago - Orden ${orderNumber}`;
+  static async sendPaymentInstructions(
+    email: string,
+    orderNumber: string,
+    amount: number,
+    expiresAt: Date,
+    locale: Locale = 'es'
+  ): Promise<boolean> {
+
+    const subject = t('paymentInstructions.subject', locale, 'emails', { orderNumber });
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #FF3E9A;">Orden Creada - Instrucciones de Pago</h2>
-        <p>Tu orden ha sido creada exitosamente. Por favor realiza el pago siguiendo las instrucciones.</p>
+        <h2 style="color: #FF3E9A;">${t('paymentInstructions.title', locale, 'emails')}</h2>
+        <p>${t('paymentInstructions.body', locale, 'emails')}</p>
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>Orden:</strong> ${orderNumber}</p>
-          <p><strong>Monto a Pagar:</strong> $${amount.toFixed(2)} USD</p>
-          <p><strong>Expira:</strong> ${expiresAt.toLocaleString('es')}</p>
+          <p><strong>${t('common.order', locale, 'emails')}:</strong> ${orderNumber}</p>
+          <p><strong>${t('common.amount', locale, 'emails')}:</strong> $${amount.toFixed(2)} USD</p>
+          <p><strong>${locale === 'en' ? 'Expires' : 'Expira'}:</strong> ${expiresAt.toLocaleString(locale === 'en' ? 'en' : 'es')}</p>
         </div>
 
-        <h3 style="color: #333; margin-top: 30px;">Metodos de Pago Disponibles:</h3>
+        <h3 style="color: #333; margin-top: 30px;">${t('paymentInstructions.methodsTitle', locale, 'emails')}</h3>
 
         <div style="background-color: #f9f9f9; padding: 15px; border-radius: 6px; margin: 15px 0;">
-          <h4 style="margin-top: 0; color: #FF3E9A;">Transferencia Bancaria</h4>
-          <p><strong>Banco:</strong> Banco Example</p>
-          <p><strong>Cuenta:</strong> 1234567890</p>
-          <p><strong>Titular:</strong> FortLoot LLC</p>
+          <h4 style="margin-top: 0; color: #FF3E9A;">${locale === 'en' ? 'Bank Transfer' : 'Transferencia Bancaria'}</h4>
+          <p><strong>${locale === 'en' ? 'Bank' : 'Banco'}:</strong> Banco Example</p>
+          <p><strong>${locale === 'en' ? 'Account' : 'Cuenta'}:</strong> 1234567890</p>
+          <p><strong>${locale === 'en' ? 'Account Holder' : 'Titular'}:</strong> FortLoot LLC</p>
         </div>
 
         <div style="background-color: #f9f9f9; padding: 15px; border-radius: 6px; margin: 15px 0;">
@@ -188,22 +210,22 @@ export class EmailService {
         </div>
 
         <div style="background-color: #f9f9f9; padding: 15px; border-radius: 6px; margin: 15px 0;">
-          <h4 style="margin-top: 0; color: #FF3E9A;">Criptomonedas</h4>
+          <h4 style="margin-top: 0; color: #FF3E9A;">${locale === 'en' ? 'Cryptocurrency' : 'Criptomonedas'}</h4>
           <p><strong>USDT (TRC20):</strong> TExampleAddress123...</p>
           <p><strong>BTC:</strong> bc1qexample...</p>
         </div>
 
         <div style="background-color: #FEF3C7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #F59E0B;">
-          <p style="margin: 0;"><strong>Importante:</strong> Despues de realizar el pago, sube tu comprobante en la pagina de tu orden. El pago sera verificado manualmente.</p>
+          <p style="margin: 0;"><strong>${locale === 'en' ? 'Important' : 'Importante'}:</strong> ${t('paymentInstructions.important', locale, 'emails')}</p>
         </div>
 
-        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/order-status/${orderNumber}"
+        <a href="${process.env.FRONTEND_URL || 'http://localhost:3000'}/${locale}/order-status/${orderNumber}"
            style="background-color: #FF3E9A; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin-top: 20px;">
-          Subir Comprobante de Pago
+          ${t('paymentInstructions.button', locale, 'emails')}
         </a>
 
         <p style="margin-top: 30px; color: #666; font-size: 14px;">
-          Gracias por tu compra en FortLoot!
+          ${t('common.thankYou', locale, 'emails')}
         </p>
       </div>
     `;
@@ -214,19 +236,24 @@ export class EmailService {
   /**
    * Send order completed notification
    */
-  static async sendOrderCompletedNotification(email: string, orderNumber: string): Promise<boolean> {
-    const subject = `Orden Completada - ${orderNumber}`;
+  static async sendOrderCompletedNotification(
+    email: string,
+    orderNumber: string,
+    locale: Locale = 'es'
+  ): Promise<boolean> {
+
+    const subject = t('orderCompleted.subject', locale, 'emails', { orderNumber });
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #10B981;">Orden Completada!</h2>
-        <p>Tu orden ha sido completada y los items han sido enviados a tu cuenta de Fortnite.</p>
+        <h2 style="color: #10B981;">${t('orderCompleted.title', locale, 'emails')}</h2>
+        <p>${t('orderCompleted.body', locale, 'emails')}</p>
         <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-          <p><strong>Orden:</strong> ${orderNumber}</p>
-          <p><strong>Estado:</strong> Completada</p>
+          <p><strong>${t('common.order', locale, 'emails')}:</strong> ${orderNumber}</p>
+          <p><strong>${t('common.status', locale, 'emails')}:</strong> ${locale === 'en' ? 'Completed' : 'Completada'}</p>
         </div>
-        <p>Verifica tu cuenta de Fortnite para ver tus nuevos items!</p>
+        <p>${t('orderCompleted.action', locale, 'emails')}</p>
         <p style="margin-top: 30px; color: #666; font-size: 14px;">
-          Gracias por confiar en FortLoot. Esperamos verte pronto!
+          ${t('orderCompleted.footer', locale, 'emails')}
         </p>
       </div>
     `;
@@ -237,24 +264,25 @@ export class EmailService {
   /**
    * Send OTP verification code
    */
-  static async sendOTPEmail(email: string, code: string): Promise<boolean> {
-    const subject = `Tu codigo de verificacion - FortLoot`;
+  static async sendOTPEmail(email: string, code: string, locale: Locale = 'es'): Promise<boolean> {
+
+    const subject = t('otpCode.subject', locale, 'emails');
     const html = `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #FF3E9A;">Codigo de Verificacion</h2>
-        <p>Has solicitado acceder a tu historial de compras en FortLoot.</p>
+        <h2 style="color: #FF3E9A;">${t('otpCode.title', locale, 'emails')}</h2>
+        <p>${t('otpCode.body', locale, 'emails')}</p>
         <div style="background-color: #f5f5f5; padding: 30px; border-radius: 8px; margin: 20px 0; text-align: center;">
-          <p style="margin: 0; font-size: 14px; color: #666;">Tu codigo es:</p>
+          <p style="margin: 0; font-size: 14px; color: #666;">${t('otpCode.codeLabel', locale, 'emails')}</p>
           <p style="margin: 10px 0; font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #FF3E9A;">${code}</p>
         </div>
         <div style="background-color: #FEF3C7; padding: 15px; border-radius: 6px; margin: 20px 0; border-left: 4px solid #F59E0B;">
-          <p style="margin: 0;"><strong>Este codigo expira en 3 minutos.</strong></p>
+          <p style="margin: 0;"><strong>${t('otpCode.expiry', locale, 'emails')}</strong></p>
         </div>
         <p style="color: #666; font-size: 14px;">
-          Si no solicitaste este codigo, puedes ignorar este mensaje de forma segura.
+          ${t('otpCode.ignore', locale, 'emails')}
         </p>
         <p style="margin-top: 30px; color: #666; font-size: 14px;">
-          - El equipo de FortLoot
+          - ${t('common.team', locale, 'emails')}
         </p>
       </div>
     `;

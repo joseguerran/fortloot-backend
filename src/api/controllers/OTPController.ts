@@ -3,6 +3,7 @@ import { OTPService } from '../../services/OTPService';
 import { prisma } from '../../database/client';
 import { log } from '../../utils/logger';
 import { ContactType } from '@prisma/client';
+import { Locale } from '../../services/LocalizationService';
 import crypto from 'crypto';
 
 export class OTPController {
@@ -101,8 +102,9 @@ export class OTPController {
    */
   static async requestOTPByEpicId(req: Request, res: Response) {
     try {
-      const { displayName } = req.body as {
+      const { displayName, locale = 'es' } = req.body as {
         displayName: string;
+        locale?: Locale;
       };
 
       if (!displayName) {
@@ -113,7 +115,7 @@ export class OTPController {
         });
       }
 
-      const result = await OTPService.requestOTPByEpicId(displayName);
+      const result = await OTPService.requestOTPByEpicId(displayName, locale);
 
       if (!result.success) {
         return res.status(400).json({

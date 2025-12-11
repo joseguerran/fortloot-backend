@@ -11,6 +11,7 @@ import { PricingService } from '../../services/PricingService';
 import { EmailService } from '../../services/EmailService';
 import { WhatsAppService } from '../../services/WhatsAppService';
 import { config } from '../../config';
+import { Locale } from '../../services/LocalizationService';
 
 // Helper function to normalize product type from frontend to backend enum
 function normalizeProductType(type: string): ProductType {
@@ -44,8 +45,19 @@ export class OrderController {
       discountAmount,
       profitAmount,
       checkoutStartedAt,
-      hasManualItems
-    } = req.body;
+      hasManualItems,
+      locale = 'es'
+    } = req.body as {
+      customerId: string;
+      items: any[];
+      totalAmount: number;
+      subtotalAmount: number;
+      discountAmount: number;
+      profitAmount: number;
+      checkoutStartedAt?: string;
+      hasManualItems?: boolean;
+      locale?: Locale;
+    };
 
     // Get customer
     const customer = await prisma.customer.findUnique({
@@ -261,7 +273,8 @@ export class OrderController {
       customer.email,
       order.orderNumber,
       totalAmount,
-      expiresAt
+      expiresAt,
+      locale
     );
 
     // Notify admin via WhatsApp

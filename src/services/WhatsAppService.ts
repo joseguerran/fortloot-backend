@@ -1,5 +1,6 @@
 import { log } from '../utils/logger';
 import { ConfigService } from './ConfigService';
+import { t, Locale } from './LocalizationService';
 
 export class WhatsAppService {
   private static wahaUrl = process.env.WAHA_API_URL || 'http://localhost:3003';
@@ -60,6 +61,7 @@ export class WhatsAppService {
 
   /**
    * Notifica al admin cuando se crea una nueva orden
+   * (Always in Spanish for internal admin use)
    */
   static async notifyOrderCreated(
     orderNumber: string,
@@ -69,20 +71,23 @@ export class WhatsAppService {
   ): Promise<boolean> {
     if (!await this.isEnabled()) return false;
 
-    const message = `🛒 *Nueva Orden Creada*
+    // Admin messages always in Spanish
+    const locale: Locale = 'es';
+    const message = `${t('orderCreated.icon', locale, 'whatsapp')} *${t('orderCreated.title', locale, 'whatsapp')}*
 
-📦 Orden: ${orderNumber}
-👤 Cliente: ${epicAccountId}
-💰 Monto: $${amount.toFixed(2)} USD
-🎮 Items: ${itemCount}
+📦 ${t('common.order', locale, 'whatsapp')}: ${orderNumber}
+👤 ${t('common.customer', locale, 'whatsapp')}: ${epicAccountId}
+💰 ${t('common.amount', locale, 'whatsapp')}: $${amount.toFixed(2)} USD
+🎮 ${t('orderCreated.items', locale, 'whatsapp')}: ${itemCount}
 
-⏳ Esperando comprobante de pago...`;
+⏳ ${t('orderCreated.waiting', locale, 'whatsapp')}`;
 
     return this.sendMessage(this.adminPhone!, message);
   }
 
   /**
    * Notifica al admin cuando se sube un comprobante de pago
+   * (Always in Spanish for internal admin use)
    */
   static async notifyPaymentUploaded(
     orderNumber: string,
@@ -91,13 +96,15 @@ export class WhatsAppService {
   ): Promise<boolean> {
     if (!await this.isEnabled()) return false;
 
-    const message = `💰 *Comprobante de Pago Subido*
+    // Admin messages always in Spanish
+    const locale: Locale = 'es';
+    const message = `${t('paymentUploaded.icon', locale, 'whatsapp')} *${t('paymentUploaded.title', locale, 'whatsapp')}*
 
-📦 Orden: ${orderNumber}
-👤 Cliente: ${epicAccountId}
-💵 Monto: $${amount.toFixed(2)} USD
+📦 ${t('common.order', locale, 'whatsapp')}: ${orderNumber}
+👤 ${t('common.customer', locale, 'whatsapp')}: ${epicAccountId}
+💵 ${t('common.amount', locale, 'whatsapp')}: $${amount.toFixed(2)} USD
 
-🔍 Requiere verificación manual.`;
+🔍 ${t('paymentUploaded.action', locale, 'whatsapp')}`;
 
     return this.sendMessage(this.adminPhone!, message);
   }
@@ -105,20 +112,21 @@ export class WhatsAppService {
   /**
    * Envía código OTP al cliente vía WhatsApp
    * Este método NO requiere que esté habilitado para admin, solo WAHA
+   * Uses customer's preferred language
    */
-  static async sendOTP(phone: string, code: string): Promise<boolean> {
+  static async sendOTP(phone: string, code: string, locale: Locale = 'es'): Promise<boolean> {
     if (!this.wahaUrl) {
       log.error('WhatsApp OTP disabled: WAHA_API_URL not configured');
       return false;
     }
 
-    const message = `🔐 *FortLoot - Código de Verificación*
+    const message = `${t('otpCode.icon', locale, 'whatsapp')} *${t('otpCode.title', locale, 'whatsapp')}*
 
-Tu código es: *${code}*
+${t('otpCode.codeLabel', locale, 'whatsapp')} *${code}*
 
-⏰ Este código expira en 3 minutos.
+⏰ ${t('otpCode.expiry', locale, 'whatsapp')}
 
-Si no solicitaste este código, ignora este mensaje.`;
+${t('otpCode.ignore', locale, 'whatsapp')}`;
 
     return this.sendMessage(phone, message);
   }
