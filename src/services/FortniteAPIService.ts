@@ -259,7 +259,7 @@ export class FortniteAPIService {
           const bundleDescription = `Includes: ${itemNames}`;
 
           parsedItems.push({
-            itemId: entry.offerId, // Use offerId as unique identifier for bundles
+            itemId: entry.bundle.name, // Use bundle name for search compatibility with Epic Games catalog
             offerId: entry.offerId,
             name: entry.bundle.name,
             description: bundleDescription,

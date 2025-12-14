@@ -1150,6 +1150,14 @@ export class FortniteBotClient extends EventEmitter {
       );
     }
 
+    // Validate item has a valid price
+    if (item.price <= 0) {
+      throw new Error(
+        `Item "${item.name}" found but has invalid price (${item.price}). ` +
+        `This may indicate the item is not available for gifting.`
+      );
+    }
+
     log.bot.info(this.botId, 'Offer ID resolved successfully', {
       originalItemId: itemId,
       resolvedOfferId: item.offerId,
