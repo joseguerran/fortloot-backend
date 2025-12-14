@@ -543,21 +543,36 @@ export class FortniteBotClient extends EventEmitter {
    * Logout and cleanup
    */
   async logout(): Promise<void> {
-    try {
-      if (this.heartbeatInterval) {
-        clearInterval(this.heartbeatInterval);
-      }
+    // Stop heartbeat first
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
 
-      if (this.client) {
-        // await this.client.logout();
+    // Attempt to logout from fnbr client
+    if (this.client) {
+      try {
+        await this.client.logout();
+      } catch (error: any) {
+        // Ignore errors about invalid tokens during logout - this is expected
+        // if the token already expired or was revoked
+        const isTokenError =
+          error?.code === 'errors.com.epicgames.common.oauth.invalid_token' ||
+          error?.message?.includes('invalid') ||
+          error?.message?.includes('OAuthToken');
+
+        if (isTokenError) {
+          log.bot.warn(this.botId, 'Token already invalid during logout, continuing cleanup');
+        } else {
+          log.bot.error(this.botId, 'Error during logout', error);
+        }
+      } finally {
         this.client = null;
       }
-
-      this.isConnected = false;
-      log.bot.info(this.botId, 'Bot logged out');
-    } catch (error) {
-      log.bot.error(this.botId, 'Error during logout', error);
     }
+
+    this.isConnected = false;
+    log.bot.info(this.botId, 'Bot logged out');
   }
 
   /**

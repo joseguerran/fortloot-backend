@@ -128,7 +128,13 @@ export class BotPool {
       health.status = bot.status;
       health.giftsAvailable = giftsAvailable;
       health.giftsToday = giftsToday;
-      health.lastHeartbeat = bot.lastHeartbeat;
+
+      // ONLY update lastHeartbeat from DB if it's more recent than the in-memory one
+      // This preserves real-time heartbeats from the bot client
+      if (!health.lastHeartbeat || (bot.lastHeartbeat && bot.lastHeartbeat > health.lastHeartbeat)) {
+        health.lastHeartbeat = bot.lastHeartbeat;
+      }
+
       health.uptime = bot.uptime;
       health.errorCount = bot.errorCount;
       health.isHealthy =

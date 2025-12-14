@@ -283,7 +283,52 @@ export class BotManager {
           log.bot.error(bot.id, '❌ Auto-sync friends failed after login', error);
         });
       }, 2000); // Wait 2 seconds after login
-    } catch (error) {
+    } catch (error: any) {
+      const errorMessage = error?.message || 'Unknown error';
+
+      // Check for invalid credentials (device auth expired/revoked)
+      const isCredentialError =
+        errorMessage.includes('invalid_refresh_token') ||
+        errorMessage.includes('TOKEN_NOT_FOUND') ||
+        errorMessage.includes('invalid_grant');
+
+      if (isCredentialError) {
+        log.bot.error(bot.id, '⚠️ Bot credentials are invalid, manual re-authentication required');
+        await prisma.bot.update({
+          where: { id: bot.id },
+          data: {
+            status: BotStatus.ERROR,
+            lastError: 'CREDENTIALS_INVALID: Device auth needs re-authentication',
+            errorCount: 999, // Prevent automatic restart attempts
+          },
+        });
+        // Don't throw - allow other bots to initialize
+        return;
+      }
+
+      // Check for STOMP 403 (rate-limited or blocked by Epic)
+      const isStompError =
+        errorMessage.includes('STOMP') && errorMessage.includes('403');
+
+      if (isStompError) {
+        log.bot.error(bot.id, '⚠️ STOMP 403 error - Epic Games may have rate-limited this bot');
+        await prisma.bot.update({
+          where: { id: bot.id },
+          data: {
+            status: BotStatus.ERROR,
+            lastError: 'RATE_LIMITED: Epic Games connection blocked (STOMP 403)',
+            errorCount: { increment: 1 },
+          },
+        });
+
+        // Exponential backoff: retry after 5 minutes * errorCount
+        const retryDelay = Math.min(5 * 60 * 1000 * (bot.errorCount + 1), 30 * 60 * 1000);
+        log.bot.warn(bot.id, `Will retry in ${retryDelay / 60000} minutes`);
+        setTimeout(() => this.restartBot(bot.id), retryDelay);
+        return;
+      }
+
+      // For other errors, throw to let the caller handle it
       log.bot.error(bot.id, 'Failed to login', error);
       throw error;
     }

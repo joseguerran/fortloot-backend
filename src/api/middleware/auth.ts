@@ -65,21 +65,8 @@ export const authenticate = async (
       apiKey: user.apiKey,
     };
 
-    // Update last login info
-    await prisma.user.update({
-      where: { id: user.id },
-      data: {
-        lastLogin: new Date(),
-        lastLoginIp: req.ip || null,
-        loginCount: { increment: 1 },
-      },
-    });
-
-    log.debug('User authentication successful', {
-      userId: user.id,
-      username: user.username,
-      role: user.role,
-    });
+    // Note: loginCount/lastLogin updates removed to reduce DB load
+    // These were being called on every single API request, causing excessive writes
 
     next();
   } catch (error) {
