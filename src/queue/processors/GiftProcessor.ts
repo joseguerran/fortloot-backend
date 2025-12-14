@@ -365,7 +365,9 @@ export class GiftProcessor {
           `Orden fallida después de ${job.attemptsMade} intentos: ${error.message}`
         );
 
-        log.order.failed(orderId, `Max retries exceeded: ${error.message}`);
+        // Get order number for logging
+        const failedOrder = await prisma.order.findUnique({ where: { id: orderId }, select: { orderNumber: true } });
+        log.order.error(failedOrder?.orderNumber || orderId, `Max reintentos excedidos: ${error.message}`);
       } else if (job) {
         // Retry attempt
         const orderId = job.data.orderId;

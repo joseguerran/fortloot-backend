@@ -2,7 +2,7 @@ import { FortniteBotClient } from './FortniteBotClient';
 import { BotPool } from './BotPool';
 import { prisma } from '../database/client';
 import { Bot, BotStatus, BotActivityType } from '@prisma/client';
-import { log } from '../utils/logger';
+import { log, registerBotName } from '../utils/logger';
 import { config } from '../config';
 import { BotConfig } from '../types';
 import { BotOfflineError } from '../utils/errors';
@@ -132,7 +132,10 @@ export class BotManager {
    * Initialize a single bot
    */
   private async initializeBot(bot: Bot): Promise<void> {
-    log.bot.info(bot.id, 'Initializing bot', { name: bot.name });
+    // Register bot name for readable logs
+    registerBotName(bot.id, bot.displayName);
+
+    log.bot.info(bot.id, 'Initializing bot', { name: bot.displayName });
 
     const botConfig: BotConfig = {
       name: bot.name,

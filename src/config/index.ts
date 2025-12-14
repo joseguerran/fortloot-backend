@@ -35,6 +35,7 @@ const envSchema = z.object({
   // Logging
   LOG_LEVEL: z.enum(['error', 'warn', 'info', 'debug']).default('info'),
   LOG_DIR: z.string().default('./logs'),
+  LOG_DEDUPE_WINDOW_MIN: z.coerce.number().default(5), // Minutes to deduplicate errors
 
   // TODO: Implement generic webhook system that reads webhook URLs from database
   // This will allow dynamic webhook configuration per event type
@@ -107,6 +108,7 @@ export const config = {
   logging: {
     level: env.LOG_LEVEL,
     dir: env.LOG_DIR,
+    dedupeWindowMin: env.LOG_DEDUPE_WINDOW_MIN,
   },
 
   // Order Configuration
