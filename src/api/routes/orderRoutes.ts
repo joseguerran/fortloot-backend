@@ -46,4 +46,7 @@ router.post('/:orderId/bot-fixed', validate(cancelOrderSchema), asyncHandler(Ord
 // Manual intervention: Continue/re-push stuck order
 router.post('/:orderId/continue', validate(cancelOrderSchema), asyncHandler(OrderController.continueOrder));
 
+// Manual intervention: Complete order manually (admin sent gift outside system)
+router.post('/:orderId/complete-manually', validate(cancelOrderSchema), asyncHandler(OrderController.completeManually));
+
 export { router as orderRoutes };

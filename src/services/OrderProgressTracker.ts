@@ -137,6 +137,7 @@ export class OrderProgressTracker {
       GIFT_SENT: 'Regalo enviado',
       RETRY: 'Reintentando',
       MANUAL_CONTINUE: 'Orden reempujada manualmente',
+      COMPLETED_MANUALLY: 'Completado manualmente por admin',
     };
 
     return descriptions[step] || step;
@@ -257,7 +258,8 @@ export type ProgressStep =
   | 'WAITING_PERIOD'
   | 'GIFT_SENT'
   | 'RETRY'
-  | 'MANUAL_CONTINUE';
+  | 'MANUAL_CONTINUE'
+  | 'COMPLETED_MANUALLY';
 
 interface ProgressStepRecord {
   step: ProgressStep;

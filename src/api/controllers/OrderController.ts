@@ -253,7 +253,12 @@ export class OrderController {
       },
     });
 
-    log.order.created(order.id, { customerId, totalAmount });
+    // Log order creation with timeline format
+    log.order.created(order.orderNumber, {
+      customer: customer.displayName,
+      item: items.length === 1 ? items[0].name : `${items.length} items`,
+      total: `$${(totalAmount / 100).toFixed(2)} USD`,
+    });
 
     // Add progress tracking for order creation
     const { OrderProgressTracker } = await import('../../services/OrderProgressTracker');
@@ -598,7 +603,7 @@ export class OrderController {
     const { OrderProgressTracker } = await import('../../services/OrderProgressTracker');
     await OrderProgressTracker.update(orderId, 'PAYMENT_VERIFIED', 'Pago verificado por administrador');
 
-    log.order.updated(orderId, 'PAYMENT_VERIFIED');
+    log.order.updated(updatedOrder.orderNumber, 'PAYMENT_VERIFIED', 'Pago verificado por administrador');
 
     // Send confirmation email
     if (order.customer?.email) {
@@ -656,7 +661,7 @@ export class OrderController {
       'Orden cancelada por administrador'
     );
 
-    log.order.updated(orderId, 'CANCELLED');
+    log.order.updated(order.orderNumber, 'CANCELLED', 'Orden cancelada por administrador');
 
     res.json({
       success: true,
@@ -707,7 +712,7 @@ export class OrderController {
     const { OrderProgressTracker } = await import('../../services/OrderProgressTracker');
     await OrderProgressTracker.update(orderId, 'RETRY_REQUESTED', 'Reintento manual solicitado por administrador');
 
-    log.order.updated(orderId, 'QUEUED');
+    log.order.updated(order.orderNumber, 'QUEUED', 'Reintento manual solicitado');
 
     // Re-queue the order for processing
     await queueManager.addOrderToQueue(orderId);
@@ -911,6 +916,78 @@ export class OrderController {
       success: true,
       data: updatedOrder,
       message: `Order continued successfully from ${order.status} status`,
+    });
+  }
+
+  /**
+   * Mark order as completed manually (admin intervention)
+   * For cases where gift was sent manually outside the system
+   */
+  static async completeManually(req: Request, res: Response) {
+    const { orderId } = req.params;
+    const { adminNote } = req.body;
+
+    const order = await prisma.order.findUnique({
+      where: { id: orderId },
+      include: { customer: true },
+    });
+
+    if (!order) {
+      throw new OrderNotFoundError(orderId);
+    }
+
+    // Solo permitir para estados que requieren intervención manual
+    const allowedStates: OrderStatus[] = [
+      OrderStatus.FAILED,
+      OrderStatus.WAITING_VBUCKS,
+      OrderStatus.WAITING_BOT_FIX,
+      OrderStatus.WAITING_BOT,
+    ];
+
+    if (!allowedStates.includes(order.status)) {
+      return res.status(400).json({
+        success: false,
+        error: 'INVALID_ORDER_STATUS',
+        message: `Cannot complete manually from status ${order.status}. Allowed: FAILED, WAITING_VBUCKS, WAITING_BOT_FIX, WAITING_BOT`,
+      });
+    }
+
+    // Actualizar orden
+    const updatedOrder = await prisma.order.update({
+      where: { id: orderId },
+      data: {
+        status: OrderStatus.COMPLETED,
+        completedAt: new Date(),
+        failureReason: null,
+      },
+    });
+
+    // Track progress
+    const { OrderProgressTracker } = await import('../../services/OrderProgressTracker');
+    await OrderProgressTracker.update(
+      orderId,
+      'COMPLETED_MANUALLY',
+      adminNote || 'Regalo entregado manualmente por administrador'
+    );
+
+    log.order.completed(order.orderNumber, {
+      manual: true,
+      adminNote,
+      previousStatus: order.status,
+    });
+
+    // Enviar email de confirmación al cliente
+    if (order.customer?.email) {
+      await EmailService.sendOrderCompletedNotification(
+        order.customer.email,
+        order.orderNumber
+      );
+    }
+
+    res.json({
+      success: true,
+      data: updatedOrder,
+      message: 'Order marked as completed manually',
     });
   }
 }
