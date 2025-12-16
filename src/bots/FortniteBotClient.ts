@@ -677,16 +677,29 @@ export class FortniteBotClient extends EventEmitter {
       if (response?.data?.profileChanges?.[0]?.profile?.items) {
         const items = response.data.profileChanges[0].profile.items;
 
-        // Look for MtxCurrency item (V-Bucks)
+        let purchasedVBucks = 0;
+        let otherVBucks = 0;
+
+        // Look for V-Bucks items - only count MtxPurchased (giftable)
         for (const [itemId, itemData] of Object.entries(items)) {
-          // @ts-ignore
-          if (itemData?.templateId === 'Currency:MtxPurchased' || itemData?.templateId?.startsWith('Currency:Mtx')) {
-            // @ts-ignore
-            const quantity = itemData?.quantity || 0;
-            log.bot.info(this.botId, 'V-Bucks balance retrieved', { vBucks: quantity });
-            return quantity;
+          const item = itemData as { templateId?: string; quantity?: number };
+
+          if (item?.templateId === 'Currency:MtxPurchased') {
+            // V-Bucks comprados - los únicos que se pueden usar para regalar
+            purchasedVBucks += item?.quantity || 0;
+          } else if (item?.templateId?.startsWith('Currency:Mtx')) {
+            // Otros tipos de V-Bucks (MtxComplimentary, MtxGiveaway, etc.)
+            otherVBucks += item?.quantity || 0;
           }
         }
+
+        log.bot.info(this.botId, 'V-Bucks balance retrieved', {
+          giftableVBucks: purchasedVBucks,
+          otherVBucks,
+          totalInAccount: purchasedVBucks + otherVBucks,
+        });
+
+        return purchasedVBucks;
       }
 
       log.bot.warn(this.botId, 'Could not find V-Bucks in profile response');
