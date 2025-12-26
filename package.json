@@ -6,7 +6,7 @@
   "private": true,
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts",
-    "build": "tsc",
+    "build": "tsc && cp -r src/locales dist/src/locales",
     "start": "node dist/src/index.js",
     "start:init": "npx prisma migrate deploy && node dist/scripts/autoSeed.js && npm start",
     "db:generate": "prisma generate",
