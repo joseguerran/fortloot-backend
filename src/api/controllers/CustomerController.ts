@@ -161,10 +161,26 @@ export class CustomerController {
       log.info(`Resolved displayName ${epicAccountId} to epicAccountId ${actualEpicAccountId}`);
     }
 
-    // Find or create customer using the actual Epic Account ID
+    // Find or create customer - search by epicAccountId first, then by displayName
     let customer = await prisma.customer.findUnique({
       where: { epicAccountId: actualEpicAccountId },
     });
+
+    // If not found by epicAccountId, try finding by displayName (users enter displayName, not epicAccountId)
+    if (!customer && displayName) {
+      customer = await prisma.customer.findUnique({
+        where: { displayName: displayName },
+      });
+
+      // If found by displayName and we now have a real epicAccountId, update it
+      if (customer && actualEpicAccountId && actualEpicAccountId !== displayName && !customer.epicAccountId) {
+        customer = await prisma.customer.update({
+          where: { id: customer.id },
+          data: { epicAccountId: actualEpicAccountId },
+        });
+        log.info(`Updated epicAccountId for customer ${displayName} to ${actualEpicAccountId}`);
+      }
+    }
 
     if (!customer) {
       // Generate session token
@@ -173,7 +189,7 @@ export class CustomerController {
       customer = await prisma.customer.create({
         data: {
           epicAccountId: actualEpicAccountId,
-          displayName: displayName || null,
+          displayName: displayName || actualEpicAccountId,
           contactPreference,
           email: email || null,
           phoneNumber: phoneNumber || null,
